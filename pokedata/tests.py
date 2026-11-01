@@ -1906,11 +1906,11 @@ class HomePageTests(TestCase):
         self.assertContains(response, f'href="{reverse("damage_calculator")}"')
         self.assertContains(response, f'href="{reverse("pokemon_table")}"')
 
-    # The team builder isn't done yet.
-    def test_team_builder_coming_soon(self):
+        # The home page and nav bar link to the team builder.
+    def test_team_builder_link(self):
         response = self.client.get(reverse("home"))
-        self.assertContains(response, "Coming soon")
-        self.assertNotContains(response, f'href="{reverse("team_builder")}"')
+        self.assertContains(response, f'href="{reverse("team_builder")}"', count=2)
+        self.assertNotContains(response, "Coming soon")
 
 
 class HealthCheckTests(TestCase):
@@ -1944,3 +1944,80 @@ class AdminSiteTests(TestCase):
             self.reload_urls()
             response = self.client.get("/admin/login/")
         self.assertEqual(response.status_code, 200)
+
+
+class TeamBuilderTests(TestCase):
+    fixtures = ["pokedata"]
+
+    # Loads the team builder with the given slots filled in.
+    def get(self, **slots):
+        return self.client.get(reverse("team_builder"), slots)
+
+    # The names in each slot, or None for empty slots.
+    def team_names(self, response):
+        return [slot["species"].name if slot["species"] else None for slot in response.context["slots"]]
+
+    # With nothing picked, the page shows six empty slots.
+    def test_empty_team(self):
+        response = self.get()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.team_names(response), [None] * 6)
+        self.assertContains(response, "0 / 6 Pokémon")
+        self.assertContains(response, "Empty slot", count=6)
+
+    # Picked Pokémon show up in their slots.
+    def test_picks_pokemon(self):
+        response = self.get(pokemon_1="garchomp", pokemon_2="snorlax")
+        self.assertEqual(self.team_names(response), ["garchomp", "snorlax", None, None, None, None])
+        self.assertContains(response, "2 / 6 Pokémon")
+
+    # A full team of six.
+    def test_full_team(self):
+        team = ["garchomp", "snorlax", "pikachu", "gengar", "dragonite", "tyranitar"]
+        response = self.get(**{f"pokemon_{slot}": name for slot, name in enumerate(team, start=1)})
+        self.assertEqual(self.team_names(response), team)
+        self.assertContains(response, "6 / 6 Pokémon")
+        self.assertNotContains(response, "Empty slot")
+
+    # Slots can be left empty in between.
+    def test_gaps(self):
+        response = self.get(pokemon_3="pikachu", pokemon_6="gengar")
+        self.assertEqual(self.team_names(response), [None, None, "pikachu", None, None, "gengar"])
+
+    # Names work with any capitals and extra spaces.
+    def test_name_cleanup(self):
+        response = self.get(pokemon_1="  GarChomp ")
+        self.assertEqual(self.team_names(response)[0], "garchomp")
+
+    # The boxes keep what was typed, so the team is still there after the page loads.
+    def test_keeps_typed_names(self):
+        response = self.get(pokemon_1="garchomp")
+        self.assertContains(response, 'value="garchomp"')
+
+    # A name that isn't a Pokémon shows an error, and the rest of the team still shows.
+    def test_unknown_pokemon(self):
+        response = self.get(pokemon_1="garchomp", pokemon_2="notamon")
+        self.assertContains(response, "notamon isn&#x27;t a Pokémon.")
+        self.assertEqual(self.team_names(response)[:2], ["garchomp", None])
+        self.assertContains(response, "1 / 6 Pokémon")
+
+    # Like in real formats, the same Pokémon can't be on the team twice.
+    def test_no_duplicates(self):
+        response = self.get(pokemon_1="garchomp", pokemon_4="garchomp")
+        self.assertContains(response, "Garchomp is already on your team.")
+        self.assertEqual(self.team_names(response), ["garchomp", None, None, None, None, None])
+
+    # Each Pokémon shows its types and base stats.
+    def test_types_and_stats(self):
+        response = self.get(pokemon_1="garchomp")
+        self.assertContains(response, "type-badge type-dragon")
+        self.assertContains(response, "type-badge type-ground")
+        stats = {stat["label"]: stat["value"] for stat in response.context["slots"][0]["stats"]}
+        self.assertEqual(stats, {"HP": 108, "Atk": 130, "Def": 95, "SpA": 80, "SpD": 85, "Spe": 102})
+        self.assertContains(response, "Base stat total: 600")
+
+    # A team only has six slots, so anything past slot 6 is ignored.
+    def test_only_six_slots(self):
+        response = self.get(pokemon_7="pikachu")
+        self.assertEqual(self.team_names(response), [None] * 6)
+        self.assertContains(response, "0 / 6 Pokémon")

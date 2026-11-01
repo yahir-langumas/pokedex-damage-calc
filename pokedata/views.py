@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from .damage_calculator import PHYSICAL_DEFENSE_SPECIAL_MOVES
-from .forms import ITEMS, STAT_KEYS, STAT_LABELS, DamageCalcForm, pretty
+from .forms import ITEMS, STAT_KEYS, STAT_LABELS, TEAM_SIZE, DamageCalcForm, TeamForm, pretty
 from .models import Learnset, Moves, Species
 from .stats import DEFAULT_LEVEL, NATURES, calculate_stats
 
@@ -16,9 +16,27 @@ def pokemon_table(request):
     return render(request, "pokemon_table.html", {"species_list": species_list})
 
 
+# The team builder page. Pick up to six Pokémon, and the URL saves the team so it can be shared.
 def team_builder(request):
-    species_list = Species.objects.all().order_by("pokedex_id")
-    return render(request, "team_builder.html", {"species_list": species_list})
+    form = TeamForm(request.GET)
+    form.is_valid()
+    team = form.cleaned_data["team"]
+    slots = [{"number": number, "field": form[f"pokemon_{number}"], "species": species, "name": pretty(species.name) if species else None, "stats": base_stat_rows(species)}
+             for number, species in enumerate(team, start=1)]
+    context = {
+        "slots": slots,
+        "team_count": sum(species is not None for species in team),
+        "team_size": TEAM_SIZE,
+        "species_names": Species.objects.order_by("name").values_list("name", flat=True),
+    }
+    return render(request, "team_builder.html", context)
+
+
+# A Pokémon's base stats for the team builder, with bar widths out of 255 (the highest base stat).
+def base_stat_rows(species):
+    if species is None:
+        return []
+    return [{"label": label, "value": species.stats[stat], "width": round(species.stats[stat] / 255 * 100)} for stat, label in STAT_LABELS.items()]
 
 def moves(request):
     moves_list = Moves.objects.all().order_by("id")

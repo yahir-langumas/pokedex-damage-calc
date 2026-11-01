@@ -20,9 +20,6 @@
   .feature-card h2 { margin: 0 0 0.6rem; font-size: 1.15rem; font-weight: 800; color: #222; }
   .feature-card p { margin: 0 0 1.1rem; color: #666; font-size: 0.92rem; line-height: 1.6; flex-grow: 1; }
   .feature-link { font-weight: 700; font-size: 0.9rem; color: #2a5db0; }
-  .feature-card.dim { background: #f6f7f9; box-shadow: none; }
-  .feature-card.dim h2, .feature-card.dim p { color: #8a8a94; }
-  .badge-soon { display: inline-block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #888; background: #e6e7ec; padding: 0.15rem 0.5rem; border-radius: 999px; margin-left: 0.4rem; vertical-align: middle; }
   @media (max-width: 480px) {
     .hero { padding: 3rem 0 2.25rem; }
     .hero h1 { font-size: 2rem; }
@@ -61,10 +58,11 @@
       <p>Search all {{ species_count }} Pokémon by name to see their types and base stat totals. Click any Pokémon for quick links to its Bulbapedia page, its Smogon sets and its Limitless VGC tournament results.</p>
       <span class="feature-link">Browse the Pokédex →</span>
     </a>
-    <div class="feature-card dim">
-      <h2>Team Builder <span class="badge-soon">Coming soon</span></h2>
-      <p>Put together a team of six and check how it matches up, using the same damage calculator.</p>
-    </div>
+        <a class="feature-card" href="{% url 'team_builder' %}">
+      <h2>Team Builder</h2>
+      <p>Pick a team of six Pokémon and see each one's types and base stats. Your team is saved in the link, so you can share it.</p>
+      <span class="feature-link">Build a team →</span>
+    </a>
   </div>
 </div>
 {% endblock %}

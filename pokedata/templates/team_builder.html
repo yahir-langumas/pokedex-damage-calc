@@ -1,8 +1,155 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div style="max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem;">
-  <h1>Team Builder</h1>
-  <p>Coming soon. {{ species_list|length }} Pokémon available.</p>
+<style>
+  .team-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  .team-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.4rem; }
+  .team-header h1 { font-size: 1.9rem; font-weight: 800; color: #222; margin: 0; }
+  .team-count { font-size: 0.9rem; color: #888; font-weight: 600; }
+  .team-note { margin: 0 0 1.5rem; color: #666; font-size: 0.92rem; line-height: 1.5; }
+  .team-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
+  .slot-card { background: #ffffff; border: 1px solid #eee; border-radius: 14px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); min-width: 0; }
+  .slot-label { display: block; font-size: 0.75rem; font-weight: 700; color: #777; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.35rem; }
+  .slot-input { display: flex; gap: 0.5rem; }
+  .slot-input input { flex: 1; min-width: 0; padding: 0.55rem 0.65rem; font: inherit; font-size: 0.92rem; color: #222; background: #fff; border: 2px solid #e5e5e5; border-radius: 10px; outline: none; transition: border-color 0.15s ease; }
+  .slot-input input:focus { border-color: #6890F0; }
+  .slot-clear { flex: none; width: 2.4rem; font: inherit; font-size: 1.2rem; font-weight: 700; color: #888; background: #f4f4f6; border: 0; border-radius: 10px; cursor: pointer; }
+  .slot-clear:hover { color: #b3261e; background: #fde8e6; }
+  .slot-error { margin: 0.75rem 0 0; padding: 0.55rem 0.75rem; background: #fdecea; color: #8c1d18; border-radius: 10px; font-weight: 600; font-size: 0.85rem; }
+  .slot-empty { display: flex; align-items: center; justify-content: center; min-height: 230px; margin: 0.75rem 0 0; border: 2px dashed #e5e5e5; border-radius: 12px; color: #aaa; font-weight: 600; font-size: 0.9rem; }
+  .slot-info { display: flex; align-items: center; gap: 0.75rem; margin: 0.75rem 0 0.6rem; }
+  .slot-info img { width: 88px; height: 88px; object-fit: contain; }
+  .slot-name { font-size: 1.05rem; font-weight: 800; color: #222; margin-bottom: 0.15rem; }
+  .dex-number { font-size: 0.75rem; font-weight: 700; color: #aaa; letter-spacing: 0.03em; margin-bottom: 0.35rem; }
+  .type-badges { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .type-badge { color: #fff; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.22rem 0.6rem; border-radius: 999px; }
+  .stat-row { display: grid; grid-template-columns: 2.4rem 2.2rem minmax(0, 1fr); align-items: center; gap: 0.4rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; margin-top: 0.2rem; }
+  .stat-row span:first-child { font-weight: 700; color: #777; }
+  .stat-row span:nth-child(2) { font-weight: 700; color: #222; text-align: right; }
+  .stat-bar { height: 8px; background: #ececf0; border-radius: 999px; overflow: hidden; }
+  .stat-bar div { height: 100%; background: #6890F0; border-radius: 999px; }
+  .stat-total { margin-top: 0.45rem; text-align: right; font-size: 0.78rem; font-weight: 700; color: #999; }
+  .team-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-top: 1.25rem; }
+  .btn { display: inline-block; padding: 0.75rem 1.5rem; border-radius: 10px; font-weight: 700; font-size: 0.95rem; text-decoration: none; }
+  .btn-secondary { background: #ffffff; color: #333; border: 2px solid #e5e5e5; }
+
+  @media (max-width: 960px) {
+    .team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 600px) {
+    .team-wrap { padding: 1.25rem 1rem 3rem; }
+    .team-grid { grid-template-columns: minmax(0, 1fr); }
+    .slot-card { padding: 1rem; }
+  }
+
+  /* Official Pokemon type colors */
+  .type-normal   { background: #A8A878; }
+  .type-fire     { background: #F08030; }
+  .type-water    { background: #6890F0; }
+  .type-electric { background: #F8D030; color: #4a3f00; }
+  .type-grass    { background: #78C850; }
+  .type-ice      { background: #98D8D8; color: #14514f; }
+  .type-fighting { background: #C03028; }
+  .type-poison   { background: #A040A0; }
+  .type-ground   { background: #E0C068; color: #4a3a00; }
+  .type-flying   { background: #A890F0; }
+  .type-psychic  { background: #F85888; }
+  .type-bug      { background: #A8B820; }
+  .type-rock     { background: #B8A038; }
+  .type-ghost    { background: #705898; }
+  .type-dragon   { background: #7038F8; }
+  .type-dark     { background: #705848; }
+  .type-steel    { background: #B8B8D0; color: #3a3a48; }
+  .type-fairy    { background: #EE99AC; color: #5c1f2c; }
+</style>
+
+<div class="team-wrap">
+  <div class="team-header">
+    <h1>Team Builder</h1>
+    <span class="team-count" id="team-count" data-live>{{ team_count }} / {{ team_size }} Pokémon</span>
+  </div>
+  <p class="team-note">Pick up to six Pokémon. The link in your address bar saves your team, so you can bookmark it or share it.</p>
+
+  <form id="team-form" method="get" action="{% url 'team_builder' %}">
+    <div class="team-grid">
+      {% for slot in slots %}
+      <section class="slot-card">
+        <label class="slot-label" for="{{ slot.field.id_for_label }}">Slot {{ slot.number }}</label>
+        <div class="slot-input">
+          {{ slot.field }}
+          <button type="button" class="slot-clear" data-slot="{{ slot.field.id_for_label }}" aria-label="Remove Pokémon {{ slot.number }}">×</button>
+        </div>
+        <div id="slot-{{ slot.number }}" data-live>
+          {% for error in slot.field.errors %}<p class="slot-error">{{ error }}</p>{% endfor %}
+          {% if slot.species %}
+          <div class="slot-info">
+            <img src="{{ slot.species.sprite }}" alt="{{ slot.name }}" width="88" height="88" onerror="this.style.visibility='hidden'">
+            <div>
+              <div class="slot-name">{{ slot.name }}</div>
+              <div class="dex-number">#{{ slot.species.pokedex_id }}</div>
+              <div class="type-badges">
+                {% for type in slot.species.types %}<span class="type-badge type-{{ type }}">{{ type }}</span>{% endfor %}
+              </div>
+            </div>
+          </div>
+          {% for stat in slot.stats %}
+          <div class="stat-row">
+            <span>{{ stat.label }}</span>
+            <span>{{ stat.value }}</span>
+            <div class="stat-bar"><div style="width: {{ stat.width }}%"></div></div>
+          </div>
+          {% endfor %}
+          <div class="stat-total">Base stat total: {{ slot.species.total_stats }}</div>
+          {% elif not slot.field.errors %}
+          <p class="slot-empty">Empty slot</p>
+          {% endif %}
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+    <div class="team-actions">
+      <a class="btn btn-secondary" href="{% url 'team_builder' %}">Clear team</a>
+    </div>
+  </form>
 </div>
+
+<datalist id="pokemon-names">
+  {% for name in species_names %}<option value="{{ name }}">{% endfor %}
+</datalist>
+
+<script>
+  (function () {
+    const form = document.getElementById("team-form");
+    let latest = 0;
+
+    // Reloads the team without reloading the page, then swaps in each slot's Pokémon.
+    async function update() {
+      const params = new URLSearchParams(new FormData(form));
+      // Leaves empty slots out of the link.
+      Array.from(params.keys()).forEach(function (name) {
+        if (!params.get(name).trim()) params.delete(name);
+      });
+      const query = params.toString() ? "?" + params.toString() : "";
+      const request = ++latest;
+      const response = await fetch(form.action + query);
+      if (request !== latest) return;
+      const page = new DOMParser().parseFromString(await response.text(), "text/html");
+      document.querySelectorAll("[data-live]").forEach(function (element) {
+        const fresh = page.getElementById(element.id);
+        if (fresh) element.innerHTML = fresh.innerHTML;
+      });
+      history.replaceState(null, "", form.action + query);
+    }
+
+    form.addEventListener("change", update);
+
+    // The × button empties its slot.
+    form.addEventListener("click", function (event) {
+      const button = event.target.closest(".slot-clear");
+      if (!button) return;
+      document.getElementById(button.dataset.slot).value = "";
+      update();
+    });
+  })();
+</script>
 {% endblock %}

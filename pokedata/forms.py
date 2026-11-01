@@ -183,7 +183,7 @@ class TeamForm(forms.Form):
         for slot in range(1, TEAM_SIZE + 1):
             self.fields[f"pokemon_{slot}"] = forms.CharField(label=f"Pokémon {slot}", required=False, widget=forms.TextInput(attrs={"list": "pokemon-names", "autocomplete": "off", "spellcheck": "false", "placeholder": "Pick a Pokémon"}))
 
-    # Looks up each slot's Pokémon. Like in real formats, a team can't have the same Pokémon twice.
+    # Looks up each slot's Pokémon
     def clean(self):
         data = super().clean()
         team = []

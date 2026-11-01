@@ -10,8 +10,6 @@
     nav { background: #24242f; display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.75rem; padding: 1rem 1.5rem; }
     nav a { color: #d8d8e0; text-decoration: none; font-weight: 600; font-size: 0.95rem; }
     nav a:hover { color: #ffffff; }
-    nav .nav-disabled { color: #6c6c78; font-weight: 600; font-size: 0.95rem; cursor: default; }
-    nav .nav-soon { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #a9a9b8; background: #36364a; padding: 0.15rem 0.45rem; border-radius: 999px; margin-left: 0.3rem; vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -19,7 +17,7 @@
     <a href="{% url 'home' %}">Home</a>
     <a href="{% url 'damage_calculator' %}">Damage Calculator</a>
     <a href="{% url 'pokemon_table' %}">Pokémon Table</a>
-    <span class="nav-disabled" title="Coming soon">Team Builder<span class="nav-soon">Soon</span></span>
+    <a href="{% url 'team_builder' %}">Team Builder</a>
   </nav>
 
   {% block content %}
