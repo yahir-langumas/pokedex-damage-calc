@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load names %}
 
 {% block content %}
 <style>
@@ -204,12 +205,12 @@
     <div class="pokemon-card" data-name="{{ pokemon.name }}">
       <img
         src="{{ pokemon.sprite }}"
-        alt="{{ pokemon.name }}"
+        alt="{{ pokemon.name|pretty }}"
         loading="lazy"
         onerror="this.style.visibility='hidden'"
       >
       <div class="dex-number">#{{ pokemon.pokedex_id }}</div>
-      <div class="pokemon-name">{{ pokemon.name }}</div>
+      <div class="pokemon-name">{{ pokemon.name|pretty }}</div>
       <div class="type-badges">
         {% for type in pokemon.types %}
         <span class="type-badge type-{{ type }}">{{ type }}</span>
@@ -232,7 +233,7 @@
 
 <script>
   function filterPokemon() {
-    const search = document.getElementById('pokemonSearch').value.trim().toLowerCase();
+    const search = document.getElementById('pokemonSearch').value.trim().toLowerCase().replaceAll(' ', '-');
     const cards = document.querySelectorAll('.pokemon-card');
     let visibleCount = 0;
 

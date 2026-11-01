@@ -1,20 +1,69 @@
 {% extends "base.html" %}
+{% load names %}
 
 {% block content %}
-<div style="max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem;">
-  <h1>Moves</h1>
-  <table>
-    <tr><th>Name</th><th>Type</th><th>Category</th><th>Power</th><th>Accuracy</th><th>PP</th></tr>
-    {% for move in moves_list %}
-    <tr>
-      <td>{{ move.name }}</td>
-      <td>{{ move.type }}</td>
-      <td>{{ move.damage_class }}</td>
-      <td>{{ move.power|default:"-" }}</td>
-      <td>{{ move.accuracy|default:"-" }}</td>
-      <td>{{ move.pp }}</td>
-    </tr>
-    {% endfor %}
-  </table>
+<style>
+  .moves-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  .moves-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 1.5rem; }
+  .moves-header h1 { font-size: 1.9rem; font-weight: 800; color: #222; margin: 0; }
+  .moves-count { font-size: 0.9rem; color: #888; font-weight: 600; }
+  .moves-card { background: #ffffff; border: 1px solid #eee; border-radius: 14px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); overflow-x: auto; }
+  .moves-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .moves-table th { text-align: left; font-size: 0.72rem; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.85rem 1rem; border-bottom: 1px solid #eee; white-space: nowrap; }
+  .moves-table td { padding: 0.55rem 1rem; border-top: 1px solid #f2f2f5; font-size: 0.92rem; color: #444; white-space: nowrap; }
+  .moves-table tbody tr:first-child td { border-top: 0; }
+  .moves-table .move-name { font-weight: 700; color: #222; }
+  .moves-table .num { text-align: right; }
+  .type-badge { display: inline-block; color: #fff; background: #9a9aa6; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.22rem 0.6rem; border-radius: 999px; }
+  @media (max-width: 600px) {
+    .moves-wrap { padding: 1.25rem 1rem 3rem; }
+    .moves-table th, .moves-table td { padding-left: 0.65rem; padding-right: 0.65rem; }
+  }
+
+  /* Official Pokemon type colors */
+  .type-normal   { background: #A8A878; }
+  .type-fire     { background: #F08030; }
+  .type-water    { background: #6890F0; }
+  .type-electric { background: #F8D030; color: #4a3f00; }
+  .type-grass    { background: #78C850; }
+  .type-ice      { background: #98D8D8; color: #14514f; }
+  .type-fighting { background: #C03028; }
+  .type-poison   { background: #A040A0; }
+  .type-ground   { background: #E0C068; color: #4a3a00; }
+  .type-flying   { background: #A890F0; }
+  .type-psychic  { background: #F85888; }
+  .type-bug      { background: #A8B820; }
+  .type-rock     { background: #B8A038; }
+  .type-ghost    { background: #705898; }
+  .type-dragon   { background: #7038F8; }
+  .type-dark     { background: #705848; }
+  .type-steel    { background: #B8B8D0; color: #3a3a48; }
+  .type-fairy    { background: #EE99AC; color: #5c1f2c; }
+</style>
+
+<div class="moves-wrap">
+  <div class="moves-header">
+    <h1>Moves</h1>
+    <span class="moves-count">{{ moves_list|length }} moves</span>
+  </div>
+  <div class="moves-card">
+    <table class="moves-table">
+      <thead>
+        <tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Category</th><th scope="col" class="num">Power</th><th scope="col" class="num">Accuracy</th><th scope="col" class="num">PP</th></tr>
+      </thead>
+      <tbody>
+        {% for move in moves_list %}
+        <tr>
+          <td class="move-name">{{ move.name|pretty }}</td>
+          <td><span class="type-badge type-{{ move.type }}">{{ move.type }}</span></td>
+          <td>{{ move.damage_class|pretty }}</td>
+          <td class="num">{{ move.power|default:"-" }}</td>
+          <td class="num">{% if move.accuracy %}{{ move.accuracy }}%{% else %}-{% endif %}</td>
+          <td class="num">{{ move.pp }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

@@ -47,8 +47,14 @@ BOOST_CHOICES = [(stage, f"{stage:+d}" if stage else "0") for stage in range(6, 
 DEFAULT_MATCHUP = {"attacker_pokemon": "garchomp", "defender_pokemon": "snorlax", "move": "earthquake"}
 
 
+# Turns database names into names people read, like "choice-scarf" into "Choice Scarf".
 def pretty(name):
     return name.replace("-", " ").title() if name else ""
+
+
+# Turns names people type back into database names, like "Choice Scarf" into "choice-scarf".
+def slug(name):
+    return (name or "").strip().lower().replace(" ", "-")
 
 
 # Labels a nature with the stats it raises and lowers, like "Adamant (+Atk, -SpA)".
@@ -78,9 +84,9 @@ class DamageCalcForm(forms.Form):
         number = {"class": "num", "inputmode": "numeric"}
         for side in SIDES:
             name = side.title()
-            self.fields[f"{side}_pokemon"] = forms.CharField(label=f"{name} Pokémon", widget=forms.TextInput(attrs={"list": "pokemon-names", "autocomplete": "off", "spellcheck": "false"}))
+            self.fields[f"{side}_pokemon"] = forms.CharField(label=f"{name} Pokémon", widget=forms.TextInput(attrs={"list": "pokemon-names", "autocomplete": "off", "spellcheck": "false", "data-slug": True}))
             self.fields[f"{side}_ability"] = forms.CharField(label=f"{name} ability", required=False)
-            self.fields[f"{side}_item"] = forms.CharField(label=f"{name} item", required=False, widget=forms.TextInput(attrs={"list": "item-names", "autocomplete": "off", "spellcheck": "false", "placeholder": "No item"}))
+            self.fields[f"{side}_item"] = forms.CharField(label=f"{name} item", required=False, widget=forms.TextInput(attrs={"list": "item-names", "autocomplete": "off", "spellcheck": "false", "placeholder": "No item", "data-slug": True}))
             self.fields[f"{side}_level"] = forms.IntegerField(label=f"{name} level", min_value=MIN_LEVEL, max_value=MAX_LEVEL, initial=DEFAULT_LEVEL, required=False, widget=forms.NumberInput(attrs=number))
             self.fields[f"{side}_nature"] = forms.ChoiceField(label=f"{name} nature", choices=NATURE_CHOICES, initial=DEFAULT_NATURE, required=False)
             self.fields[f"{side}_status"] = forms.ChoiceField(label=f"{name} status", choices=STATUS_CHOICES, required=False)
@@ -102,19 +108,21 @@ class DamageCalcForm(forms.Form):
     def clean(self):
         data = super().clean()
         for side in SIDES:
-            name = (data.get(f"{side}_pokemon") or "").strip().lower()
-            species = Species.objects.filter(name=name).first()
+            typed = (data.get(f"{side}_pokemon") or "").strip()
+            species = Species.objects.filter(name=slug(typed)).first()
             if species is None:
-                if name:
-                    self.add_error(f"{side}_pokemon", f"{name} isn't a Pokémon.")
+                if typed:
+                    self.add_error(f"{side}_pokemon", f"{typed} isn't a Pokémon.")
                 continue
             data[f"{side}_species"] = species
             ability = data.get(f"{side}_ability")
             if ability and ability not in species.abilities:
                 self.add_error(f"{side}_ability", f"{pretty(species.name)} can't have {pretty(ability)}.")
-            item = data.get(f"{side}_item")
+            typed_item = data.get(f"{side}_item") or ""
+            item = slug(typed_item)
             if item and item not in ITEMS:
-                self.add_error(f"{side}_item", f"{item} isn't an item the calc knows.")
+                self.add_error(f"{side}_item", f"{typed_item} isn't an item the calc knows.")
+            data[f"{side}_item"] = item
             try:
                 data[f"{side}_build"] = make_build(self.build(side, data))
             except ValueError as error:
@@ -181,17 +189,17 @@ class TeamForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for slot in range(1, TEAM_SIZE + 1):
-            self.fields[f"pokemon_{slot}"] = forms.CharField(label=f"Pokémon {slot}", required=False, widget=forms.TextInput(attrs={"list": "pokemon-names", "autocomplete": "off", "spellcheck": "false", "placeholder": "Pick a Pokémon"}))
+            self.fields[f"pokemon_{slot}"] = forms.CharField(label=f"Pokémon {slot}", required=False, widget=forms.TextInput(attrs={"list": "pokemon-names", "autocomplete": "off", "spellcheck": "false", "placeholder": "Pick a Pokémon", "data-slug": True}))
 
     # Looks up each slot's Pokémon
     def clean(self):
         data = super().clean()
         team = []
         for slot in range(1, TEAM_SIZE + 1):
-            name = (data.get(f"pokemon_{slot}") or "").strip().lower()
-            species = Species.objects.filter(name=name).first() if name else None
-            if name and species is None:
-                self.add_error(f"pokemon_{slot}", f"{name} isn't a Pokémon.")
+            typed = (data.get(f"pokemon_{slot}") or "").strip()
+            species = Species.objects.filter(name=slug(typed)).first() if typed else None
+            if typed and species is None:
+                self.add_error(f"pokemon_{slot}", f"{typed} isn't a Pokémon.")
             elif species is not None and species in team:
                 self.add_error(f"pokemon_{slot}", f"{pretty(species.name)} is already on your team.")
                 species = None

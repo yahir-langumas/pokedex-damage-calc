@@ -1,9 +1,19 @@
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from .damage_calculator import PHYSICAL_DEFENSE_SPECIAL_MOVES
-from .forms import ITEMS, STAT_KEYS, STAT_LABELS, TEAM_SIZE, DamageCalcForm, TeamForm, pretty
+from .forms import ITEMS, STAT_KEYS, STAT_LABELS, TEAM_SIZE, DamageCalcForm, TeamForm, pretty, slug
 from .models import Learnset, Moves, Species
 from .stats import DEFAULT_LEVEL, NATURES, calculate_stats
+
+
+# Shows names the way people read them, like "Choice Scarf" instead of "choice-scarf". The forms turn them back into database names.
+def display_names(data, fields):
+    return {name: pretty(slug(value)) if name in fields else value for name, value in data.items()}
+
+
+# Every Pokémon's name for the name boxes, like "Iron Valiant".
+def species_names():
+    return [pretty(name) for name in Species.objects.order_by("name").values_list("name", flat=True)]
 
 
 def home(request):
@@ -18,7 +28,7 @@ def pokemon_table(request):
 
 # The team builder page. Pick up to six Pokémon, and the URL saves the team so it can be shared.
 def team_builder(request):
-    form = TeamForm(request.GET)
+    form = TeamForm(display_names(request.GET.dict(), [f"pokemon_{number}" for number in range(1, TEAM_SIZE + 1)]))
     form.is_valid()
     team = form.cleaned_data["team"]
     slots = [{"number": number, "field": form[f"pokemon_{number}"], "species": species, "name": pretty(species.name) if species else None, "stats": base_stat_rows(species)}
@@ -27,7 +37,7 @@ def team_builder(request):
         "slots": slots,
         "team_count": sum(species is not None for species in team),
         "team_size": TEAM_SIZE,
-        "species_names": Species.objects.order_by("name").values_list("name", flat=True),
+        "species_names": species_names(),
     }
     return render(request, "team_builder.html", context)
 
@@ -47,7 +57,7 @@ def moves(request):
 def damage_calculator(request):
     data = DamageCalcForm.default_data()
     data.update(request.GET.dict())
-    form = DamageCalcForm(data)
+    form = DamageCalcForm(display_names(data, [f"{side}_{field}" for side in ("attacker", "defender") for field in ("pokemon", "item")]))
     result = description = hp_bar = None
     if form.is_valid():
         calc = form.make_calculator()
@@ -64,8 +74,8 @@ def damage_calculator(request):
         "defender": side_details(form, "defender"),
         "moves": move_choices(attacker, form.cleaned_data.get("move_data")) if attacker else [],
         "selected_move": form.data.get("move"),
-        "species_names": Species.objects.order_by("name").values_list("name", flat=True),
-        "items": [(item, pretty(item)) for item in ITEMS],
+        "species_names": species_names(),
+        "items": [pretty(item) for item in ITEMS],
         "effectiveness": effectiveness_text(result["effectiveness"]) if result else None,
     }
     return render(request, "damage_calculator.html", context)

@@ -122,9 +122,22 @@
     const form = document.getElementById("team-form");
     let latest = 0;
 
+    // Turns names people read back into database names for the link, like "Iron Valiant" into "iron-valiant".
+    function slug(name) {
+      return name.trim().toLowerCase().replaceAll(" ", "-");
+    }
+
+    // Shows a typed name the way people read it, like "choice-scarf" as "Choice Scarf".
+    function pretty(name) {
+      return slug(name).replaceAll("-", " ").replace(/\b\w/g, function (letter) { return letter.toUpperCase(); });
+    }
+
     // Reloads the team without reloading the page, then swaps in each slot's Pokémon.
     async function update() {
       const params = new URLSearchParams(new FormData(form));
+      form.querySelectorAll("[data-slug]").forEach(function (box) {
+        if (params.has(box.name)) params.set(box.name, slug(params.get(box.name)));
+      });
       // Leaves empty slots out of the link.
       Array.from(params.keys()).forEach(function (name) {
         if (!params.get(name).trim()) params.delete(name);
@@ -141,7 +154,10 @@
       history.replaceState(null, "", form.action + query);
     }
 
-    form.addEventListener("change", update);
+    form.addEventListener("change", function (event) {
+      if (event.target.hasAttribute("data-slug")) event.target.value = pretty(event.target.value);
+      update();
+    });
 
     // The × button empties its slot.
     form.addEventListener("click", function (event) {

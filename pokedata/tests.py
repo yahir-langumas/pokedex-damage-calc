@@ -1,4 +1,5 @@
 import importlib
+import re
 from unittest.mock import Mock, patch
 import requests
 from django.core.management import call_command
@@ -8,6 +9,7 @@ import config.urls
 from pokedata.models import Learnset, Moves, Species, Type
 from pokedata.damage_calculator import DamageCalculator, apply_stage, chain_modifiers, damage_rolls, ko_chance_text, modifier_from, poke_round, to_4096
 from pokedata.stats import calculate_stats, make_build
+from pokedata.forms import ITEMS, pretty, slug
 
 # Builds a DamageCalculator from Pokémon and move names.
 def make_calc(attacker, defender, move, attacker_ability=None, defender_ability=None, attacker_item=None, defender_item=None, weather=None, attacker_build=None, defender_build=None):
@@ -1946,6 +1948,72 @@ class AdminSiteTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class NameFormatTests(TestCase):
+    fixtures = ["pokedata"]
+
+    # pretty turns database names into names people read, and slug turns them back.
+    def test_pretty_and_slug(self):
+        self.assertEqual(pretty("choice-scarf"), "Choice Scarf")
+        self.assertEqual(slug("  Choice Scarf "), "choice-scarf")
+        self.assertEqual((pretty(""), slug(None)), ("", ""))
+
+    # Every Pokémon, move and item name turns back into the same database name, so typing what the page shows always works.
+    def test_every_name_round_trips(self):
+        names = list(Species.objects.values_list("name", flat=True)) + list(Moves.objects.values_list("name", flat=True)) + ITEMS
+        self.assertEqual([name for name in names if slug(pretty(name)) != name], [])
+
+    # The calc page shows readable names in its boxes and name lists.
+    def test_calc_shows_readable_names(self):
+        response = self.client.get(reverse("damage_calculator"), {"attacker_item": "choice-band"})
+        self.assertContains(response, 'value="Garchomp"')
+        self.assertContains(response, 'value="Choice Band"')
+        self.assertContains(response, '<option value="Iron Valiant">')
+        self.assertNotContains(response, '<option value="iron-valiant">')
+
+    # The calc gives the same result with readable names and database names.
+    def test_calc_takes_readable_names(self):
+        readable = self.client.get(reverse("damage_calculator"), {"attacker_pokemon": "Garchomp", "attacker_item": "Choice Band", "defender_pokemon": "Iron Valiant"})
+        database = self.client.get(reverse("damage_calculator"), {"attacker_pokemon": "garchomp", "attacker_item": "choice-band", "defender_pokemon": "iron-valiant"})
+        self.assertIsNotNone(readable.context["result"])
+        self.assertEqual(readable.context["result"], database.context["result"])
+
+    # Calc errors show names the way they were typed.
+    def test_calc_error_names(self):
+        errors = self.client.get(reverse("damage_calculator"), {"attacker_pokemon": "Notamon", "defender_item": "Rare Candy"}).context["form"].error_list()
+        self.assertIn("Attacker Pokémon: Notamon isn't a Pokémon.", errors)
+        self.assertIn("Defender item: Rare Candy isn't an item the calc knows.", errors)
+
+    # The team builder shows readable names in its boxes and name list.
+    def test_team_shows_readable_names(self):
+        response = self.client.get(reverse("team_builder"), {"pokemon_1": "iron-valiant"})
+        self.assertContains(response, 'value="Iron Valiant"')
+        self.assertContains(response, '<option value="Iron Valiant">')
+
+    # The team builder takes names with spaces, like "Iron Valiant".
+    def test_team_takes_readable_names(self):
+        response = self.client.get(reverse("team_builder"), {"pokemon_1": "Iron Valiant"})
+        self.assertEqual(response.context["slots"][0]["species"].name, "iron-valiant")
+
+    # The Pokédex shows readable names but keeps the database name for its links.
+    def test_pokedex_names(self):
+        response = self.client.get(reverse("pokemon_table"))
+        self.assertContains(response, '<div class="pokemon-name">Iron Valiant</div>')
+        self.assertContains(response, 'data-name="iron-valiant"')
+
+    # The moves page shows readable move names and categories.
+    def test_moves_page_names(self):
+        response = self.client.get(reverse("moves"))
+        self.assertContains(response, '<td class="move-name">Close Combat</td>')
+        self.assertContains(response, "<td>Physical</td>")
+        self.assertNotContains(response, ">close-combat<")
+
+    # The name boxes are marked so the page's links use database names and stay short.
+    def test_name_boxes_marked_for_links(self):
+        for page, boxes in (("damage_calculator", 4), ("team_builder", 6)):
+            html = self.client.get(reverse(page)).content.decode()
+            self.assertEqual(len(re.findall(r"<input[^>]*data-slug", html)), boxes)
+
+
 class TeamBuilderTests(TestCase):
     fixtures = ["pokedata"]
 
@@ -1989,15 +2057,15 @@ class TeamBuilderTests(TestCase):
         response = self.get(pokemon_1="  GarChomp ")
         self.assertEqual(self.team_names(response)[0], "garchomp")
 
-    # The boxes keep what was typed, so the team is still there after the page loads.
+    # The boxes keep the team, with names the way people read them.
     def test_keeps_typed_names(self):
         response = self.get(pokemon_1="garchomp")
-        self.assertContains(response, 'value="garchomp"')
+        self.assertContains(response, 'value="Garchomp"')
 
     # A name that isn't a Pokémon shows an error, and the rest of the team still shows.
     def test_unknown_pokemon(self):
         response = self.get(pokemon_1="garchomp", pokemon_2="notamon")
-        self.assertContains(response, "notamon isn&#x27;t a Pokémon.")
+        self.assertContains(response, "Notamon isn&#x27;t a Pokémon.")
         self.assertEqual(self.team_names(response)[:2], ["garchomp", None])
         self.assertContains(response, "1 / 6 Pokémon")
 
