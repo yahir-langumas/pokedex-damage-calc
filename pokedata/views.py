@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from .damage_calculator import PHYSICAL_DEFENSE_SPECIAL_MOVES
-from .forms import ITEMS, STAT_KEYS, STAT_LABELS, TEAM_SIZE, DamageCalcForm, TeamForm, pretty, slug
+from .forms import ITEMS, MOVE_SLOTS, STAT_KEYS, STAT_LABELS, TEAM_SIZE, DamageCalcForm, TeamForm, learnable_moves, pretty, slug
 from .models import Learnset, Moves, Species
 from .stats import DEFAULT_LEVEL, NATURES, calculate_stats
 
@@ -26,27 +26,42 @@ def pokemon_table(request):
     return render(request, "pokemon_table.html", {"species_list": species_list})
 
 
-# The team builder page. Pick up to six Pokémon, and the URL saves the team so it can be shared.
+# The team builder page. Pick up to six Pokémon and set each one's ability, item, nature, EVs, IVs and moves. The URL saves the team so it can be shared.
 def team_builder(request):
-    form = TeamForm(display_names(request.GET.dict(), [f"pokemon_{number}" for number in range(1, TEAM_SIZE + 1)]))
+    names = [f"{field}_{number}" for number in range(1, TEAM_SIZE + 1) for field in ("pokemon", "item", *[f"move{move}" for move in range(1, MOVE_SLOTS + 1)])]
+    form = TeamForm(display_names(TeamForm.with_defaults(request.GET), names))
     form.is_valid()
     team = form.cleaned_data["team"]
-    slots = [{"number": number, "field": form[f"pokemon_{number}"], "species": species, "name": pretty(species.name) if species else None, "stats": base_stat_rows(species)}
-             for number, species in enumerate(team, start=1)]
     context = {
-        "slots": slots,
+        "slots": [team_slot(form, number, species) for number, species in enumerate(team, start=1)],
         "team_count": sum(species is not None for species in team),
         "team_size": TEAM_SIZE,
         "species_names": species_names(),
+        "items": [pretty(item) for item in ITEMS],
     }
     return render(request, "team_builder.html", context)
 
 
-# A Pokémon's base stats for the team builder, with bar widths out of 255 (the highest base stat).
-def base_stat_rows(species):
-    if species is None:
-        return []
-    return [{"label": label, "value": species.stats[stat], "width": round(species.stats[stat] / 255 * 100)} for stat, label in STAT_LABELS.items()]
+# Everything one team slot shows: the Pokémon, its fields, its real stats and its errors.
+def team_slot(form, number, species):
+    build = form.cleaned_data.get(f"build_{number}")
+    stats = calculate_stats(species.stats, build, species.pokedex_id) if species and build else {}
+    raised, lowered = NATURES[build["nature"]] if build else (None, None)
+    rows = []
+    for key, stat in STAT_KEYS.items():
+        rows.append({"label": STAT_LABELS[stat], "base": species.stats[stat] if species else "", "stat": stats.get(stat, ""),
+                     "nature": "+" if stat == raised else "-" if stat == lowered else "",
+                     "iv": form[f"iv_{key}_{number}"], "ev": form[f"ev_{key}_{number}"]})
+    abilities = species.abilities if species else []
+    picked = form.data.get(f"ability_{number}")
+    return {"number": number, "species": species, "name": pretty(species.name) if species else "", "field": form[f"pokemon_{number}"],
+            "fields": {name: form[f"{name}_{number}"] for name in ("item", "level", "nature")},
+            "abilities": [(ability, pretty(ability)) for ability in abilities], "ability": picked if picked in abilities else (abilities[0] if abilities else ""),
+            "moves": [form[f"move{move}_{number}"] for move in range(1, MOVE_SLOTS + 1)],
+            "move_options": [pretty(move.name) for move in learnable_moves(species).order_by("name")] if species else [],
+            "rows": rows, "ev_total": sum(form.cleaned_data.get(f"ev_{key}_{number}") or 0 for key in STAT_KEYS),
+            "errors": form.slot_errors(number, species is not None)}
+
 
 def moves(request):
     moves_list = Moves.objects.all().order_by("id")

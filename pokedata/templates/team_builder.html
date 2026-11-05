@@ -7,36 +7,46 @@
   .team-header h1 { font-size: 1.9rem; font-weight: 800; color: #222; margin: 0; }
   .team-count { font-size: 0.9rem; color: #888; font-weight: 600; }
   .team-note { margin: 0 0 1.5rem; color: #666; font-size: 0.92rem; line-height: 1.5; }
-  .team-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
+  .team-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; align-items: start; }
   .slot-card { background: #ffffff; border: 1px solid #eee; border-radius: 14px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); min-width: 0; }
-  .slot-label { display: block; font-size: 0.75rem; font-weight: 700; color: #777; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.35rem; }
+  .slot-label, .field > span, .moves-label { display: block; font-size: 0.75rem; font-weight: 700; color: #777; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.35rem; }
   .slot-input { display: flex; gap: 0.5rem; }
-  .slot-input input { flex: 1; min-width: 0; padding: 0.55rem 0.65rem; font: inherit; font-size: 0.92rem; color: #222; background: #fff; border: 2px solid #e5e5e5; border-radius: 10px; outline: none; transition: border-color 0.15s ease; }
-  .slot-input input:focus { border-color: #6890F0; }
+  .slot-card input, .slot-card select { width: 100%; min-width: 0; padding: 0.55rem 0.65rem; font: inherit; font-size: 0.92rem; color: #222; background: #fff; border: 2px solid #e5e5e5; border-radius: 10px; outline: none; transition: border-color 0.15s ease; }
+  .slot-card input:focus, .slot-card select:focus { border-color: #6890F0; }
   .slot-clear { flex: none; width: 2.4rem; font: inherit; font-size: 1.2rem; font-weight: 700; color: #888; background: #f4f4f6; border: 0; border-radius: 10px; cursor: pointer; }
   .slot-clear:hover { color: #b3261e; background: #fde8e6; }
-  .slot-error { margin: 0.75rem 0 0; padding: 0.55rem 0.75rem; background: #fdecea; color: #8c1d18; border-radius: 10px; font-weight: 600; font-size: 0.85rem; }
-  .slot-empty { display: flex; align-items: center; justify-content: center; min-height: 230px; margin: 0.75rem 0 0; border: 2px dashed #e5e5e5; border-radius: 12px; color: #aaa; font-weight: 600; font-size: 0.9rem; }
-  .slot-info { display: flex; align-items: center; gap: 0.75rem; margin: 0.75rem 0 0.6rem; }
-  .slot-info img { width: 88px; height: 88px; object-fit: contain; }
+  .slot-errors:empty { display: none; }
+  .slot-errors { margin: 0.75rem 0 0; padding: 0.55rem 0.75rem 0.55rem 1.6rem; background: #fdecea; color: #8c1d18; border-radius: 10px; font-weight: 600; font-size: 0.85rem; }
+  .slot-errors li + li { margin-top: 0.2rem; }
+  .slot-empty { display: flex; align-items: center; justify-content: center; min-height: 160px; margin: 0.75rem 0 0; border: 2px dashed #e5e5e5; border-radius: 12px; color: #aaa; font-weight: 600; font-size: 0.9rem; }
+  .slot-info { display: flex; align-items: center; gap: 0.75rem; margin: 0.75rem 0; }
+  .slot-info img { width: 72px; height: 72px; object-fit: contain; }
   .slot-name { font-size: 1.05rem; font-weight: 800; color: #222; margin-bottom: 0.15rem; }
   .dex-number { font-size: 0.75rem; font-weight: 700; color: #aaa; letter-spacing: 0.03em; margin-bottom: 0.35rem; }
   .type-badges { display: flex; flex-wrap: wrap; gap: 0.3rem; }
   .type-badge { color: #fff; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.22rem 0.6rem; border-radius: 999px; }
-  .stat-row { display: grid; grid-template-columns: 2.4rem 2.2rem minmax(0, 1fr); align-items: center; gap: 0.4rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; margin-top: 0.2rem; }
-  .stat-row span:first-child { font-weight: 700; color: #777; }
-  .stat-row span:nth-child(2) { font-weight: 700; color: #222; text-align: right; }
-  .stat-bar { height: 8px; background: #ececf0; border-radius: 999px; overflow: hidden; }
-  .stat-bar div { height: 100%; background: #6890F0; border-radius: 999px; }
-  .stat-total { margin-top: 0.45rem; text-align: right; font-size: 0.78rem; font-weight: 700; color: #999; }
+  .field { display: flex; flex-direction: column; margin-bottom: 0.65rem; min-width: 0; }
+  .field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.6rem; }
+  .level-row { grid-template-columns: 4.5rem minmax(0, 1fr); }
+  .stat-table { width: 100%; border-collapse: collapse; margin-top: 0.2rem; font-variant-numeric: tabular-nums; }
+  .stat-table th, .stat-table td { padding: 0.2rem 0.15rem; text-align: center; font-size: 0.85rem; }
+  .stat-table thead th { font-size: 0.68rem; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-table tbody th { text-align: left; font-weight: 700; color: #555; }
+  .stat-table td.base { color: #888; }
+  .stat-table td.total { font-weight: 800; color: #222; }
+  .stat-table .up { color: #c03028; } .stat-table .down { color: #2a5db0; }
+  .stat-table input { max-width: 3.6rem; padding: 0.3rem 0.2rem; font-size: 0.85rem; text-align: center; border-radius: 8px; }
+  .ev-total { text-align: right; font-size: 0.78rem; font-weight: 700; color: #999; margin: 0.35rem 0 0.75rem; min-height: 1em; }
+  .ev-total .over { color: #b3261e; }
+  .move-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; }
   .team-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-top: 1.25rem; }
   .btn { display: inline-block; padding: 0.75rem 1.5rem; border-radius: 10px; font-weight: 700; font-size: 0.95rem; text-decoration: none; }
   .btn-secondary { background: #ffffff; color: #333; border: 2px solid #e5e5e5; }
 
-  @media (max-width: 960px) {
+  @media (max-width: 1100px) {
     .team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
-  @media (max-width: 600px) {
+  @media (max-width: 700px) {
     .team-wrap { padding: 1.25rem 1rem 3rem; }
     .team-grid { grid-template-columns: minmax(0, 1fr); }
     .slot-card { padding: 1rem; }
@@ -68,7 +78,7 @@
     <h1>Team Builder</h1>
     <span class="team-count" id="team-count" data-live>{{ team_count }} / {{ team_size }} Pokémon</span>
   </div>
-  <p class="team-note">Pick up to six Pokémon. The link in your address bar saves your team, so you can bookmark it or share it.</p>
+  <p class="team-note">Pick up to six Pokémon and set each one's ability, item, nature, EVs, IVs and moves. The link in your address bar saves your team, so you can bookmark it or share it.</p>
 
   <form id="team-form" method="get" action="{% url 'team_builder' %}">
     <div class="team-grid">
@@ -77,30 +87,76 @@
         <label class="slot-label" for="{{ slot.field.id_for_label }}">Slot {{ slot.number }}</label>
         <div class="slot-input">
           {{ slot.field }}
-          <button type="button" class="slot-clear" data-slot="{{ slot.field.id_for_label }}" aria-label="Remove Pokémon {{ slot.number }}">×</button>
+          <button type="button" class="slot-clear" data-slot="{{ slot.field.id_for_label }}" data-number="{{ slot.number }}" aria-label="Remove Pokémon {{ slot.number }}">×</button>
         </div>
-        <div id="slot-{{ slot.number }}" data-live>
-          {% for error in slot.field.errors %}<p class="slot-error">{{ error }}</p>{% endfor %}
+        <ul class="slot-errors" id="slot-{{ slot.number }}-errors" data-live>{% for error in slot.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+
+        <div id="slot-{{ slot.number }}" data-species="{{ slot.species.name|default:'' }}">
           {% if slot.species %}
           <div class="slot-info">
-            <img src="{{ slot.species.sprite }}" alt="{{ slot.name }}" width="88" height="88" onerror="this.style.visibility='hidden'">
+            <img src="{{ slot.species.sprite }}" alt="{{ slot.name }}" width="72" height="72" onerror="this.style.visibility='hidden'">
             <div>
               <div class="slot-name">{{ slot.name }}</div>
-              <div class="dex-number">#{{ slot.species.pokedex_id }}</div>
+              <div class="dex-number">#{{ slot.species.pokedex_id }} · Base stat total: {{ slot.species.total_stats }}</div>
               <div class="type-badges">
                 {% for type in slot.species.types %}<span class="type-badge type-{{ type }}">{{ type }}</span>{% endfor %}
               </div>
             </div>
           </div>
-          {% for stat in slot.stats %}
-          <div class="stat-row">
-            <span>{{ stat.label }}</span>
-            <span>{{ stat.value }}</span>
-            <div class="stat-bar"><div style="width: {{ stat.width }}%"></div></div>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Ability</span>
+              <select name="ability_{{ slot.number }}">
+                {% for name, label in slot.abilities %}<option value="{{ name }}"{% if name == slot.ability %} selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </label>
+            <label class="field">
+              <span>Item</span>
+              {{ slot.fields.item }}
+            </label>
           </div>
-          {% endfor %}
-          <div class="stat-total">Base stat total: {{ slot.species.total_stats }}</div>
-          {% elif not slot.field.errors %}
+          <div class="field-row level-row">
+            <label class="field">
+              <span>Level</span>
+              {{ slot.fields.level }}
+            </label>
+            <label class="field">
+              <span>Nature</span>
+              {{ slot.fields.nature }}
+            </label>
+          </div>
+
+          <table class="stat-table">
+            <thead>
+              <tr><th scope="col">Stat</th><th scope="col">Base</th><th scope="col">IVs</th><th scope="col">EVs</th><th scope="col">Total</th></tr>
+            </thead>
+            <tbody>
+              {% for row in slot.rows %}
+              <tr>
+                <th scope="row">{{ row.label }}</th>
+                <td class="base">{{ row.base }}</td>
+                <td>{{ row.iv }}</td>
+                <td>{{ row.ev }}</td>
+                <td class="total" id="slot-{{ slot.number }}-stat-{{ forloop.counter }}" data-live>
+                  <span class="{% if row.nature == '+' %}up{% elif row.nature == '-' %}down{% endif %}">{{ row.stat }}{{ row.nature }}</span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="ev-total" id="slot-{{ slot.number }}-ev-total" data-live>
+            <span{% if slot.ev_total > 510 %} class="over"{% endif %}>{{ slot.ev_total }} / 510 EVs</span>
+          </div>
+
+          <span class="moves-label">Moves</span>
+          <div class="move-grid">
+            {% for move in slot.moves %}{{ move }}{% endfor %}
+          </div>
+          <datalist id="moves-{{ slot.number }}">
+            {% for name in slot.move_options %}<option value="{{ name }}">{% endfor %}
+          </datalist>
+          {% else %}
           <p class="slot-empty">Empty slot</p>
           {% endif %}
         </div>
@@ -116,10 +172,15 @@
 <datalist id="pokemon-names">
   {% for name in species_names %}<option value="{{ name }}">{% endfor %}
 </datalist>
+<datalist id="item-names">
+  {% for name in items %}<option value="{{ name }}">{% endfor %}
+</datalist>
 
 <script>
   (function () {
     const form = document.getElementById("team-form");
+    const MAX_TOTAL_EVS = 510;
+    let timer = null;
     let latest = 0;
 
     // Turns names people read back into database names for the link, like "Iron Valiant" into "iron-valiant".
@@ -132,21 +193,40 @@
       return slug(name).replaceAll("-", " ").replace(/\b\w/g, function (letter) { return letter.toUpperCase(); });
     }
 
-    // Reloads the team without reloading the page, then swaps in each slot's Pokémon.
-    async function update() {
+    // The team's link. Uses database names and leaves out empty boxes and boxes left at their default, so links stay short.
+    function teamParams(newSlot) {
       const params = new URLSearchParams(new FormData(form));
       form.querySelectorAll("[data-slug]").forEach(function (box) {
         if (params.has(box.name)) params.set(box.name, slug(params.get(box.name)));
       });
-      // Leaves empty slots out of the link.
+      form.querySelectorAll("[data-default]").forEach(function (box) {
+        if (params.get(box.name) === box.dataset.default) params.delete(box.name);
+      });
       Array.from(params.keys()).forEach(function (name) {
         if (!params.get(name).trim()) params.delete(name);
       });
-      const query = params.toString() ? "?" + params.toString() : "";
+      // A new Pokémon starts with its own first ability and no moves.
+      if (newSlot) {
+        ["ability_", "move1_", "move2_", "move3_", "move4_"].forEach(function (name) { params.delete(name + newSlot); });
+      }
+      return params.toString();
+    }
+
+    // Reloads the team without reloading the page. A slot with a new Pokémon gets swapped in whole, and the rest just get new stats and errors.
+    async function update(newSlot) {
+      const params = teamParams(newSlot);
+      const query = params ? "?" + params : "";
       const request = ++latest;
       const response = await fetch(form.action + query);
       if (request !== latest) return;
       const page = new DOMParser().parseFromString(await response.text(), "text/html");
+      document.querySelectorAll("[data-species]").forEach(function (slot) {
+        const fresh = page.getElementById(slot.id);
+        if (fresh && (fresh.dataset.species !== slot.dataset.species || slot.id === "slot-" + newSlot)) {
+          slot.innerHTML = fresh.innerHTML;
+          slot.dataset.species = fresh.dataset.species;
+        }
+      });
       document.querySelectorAll("[data-live]").forEach(function (element) {
         const fresh = page.getElementById(element.id);
         if (fresh) element.innerHTML = fresh.innerHTML;
@@ -154,9 +234,35 @@
       history.replaceState(null, "", form.action + query);
     }
 
+    // Keeps a number box between its min and max (252 for EVs, 31 for IVs, etc.) and keeps each Pokémon's EVs at 510 total or less.
+    function keepInLimits(input) {
+      if (input.value === "") return;
+      let value = Math.round(Number(input.value));
+      if (input.min !== "") value = Math.max(value, Number(input.min));
+      if (input.max !== "") value = Math.min(value, Number(input.max));
+      const ev = input.name.match(/^ev_\w+_(\d)$/);
+      if (ev) {
+        let others = 0;
+        form.querySelectorAll("input[name^='ev_'][name$='_" + ev[1] + "']").forEach(function (box) {
+          if (box !== input) others += Number(box.value) || 0;
+        });
+        value = Math.min(value, Math.max(0, MAX_TOTAL_EVS - others));
+      }
+      if (String(value) !== input.value) input.value = value;
+    }
+
     form.addEventListener("change", function (event) {
+      const name = event.target.name || "";
       if (event.target.hasAttribute("data-slug")) event.target.value = pretty(event.target.value);
-      update();
+      if (name.startsWith("pokemon_")) update(name.split("_")[1]);
+      else if (event.target.type !== "number") update();
+    });
+    form.addEventListener("input", function (event) {
+      if (event.target.type === "number") {
+        keepInLimits(event.target);
+        clearTimeout(timer);
+        timer = setTimeout(function () { update(); }, 250);
+      }
     });
 
     // The × button empties its slot.
@@ -164,7 +270,7 @@
       const button = event.target.closest(".slot-clear");
       if (!button) return;
       document.getElementById(button.dataset.slot).value = "";
-      update();
+      update(button.dataset.number);
     });
   })();
 </script>

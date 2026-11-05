@@ -2025,6 +2025,14 @@ class TeamBuilderTests(TestCase):
     def team_names(self, response):
         return [slot["species"].name if slot["species"] else None for slot in response.context["slots"]]
 
+    # One slot's real stats, like {"HP": 183, "Atk": 150, ...}.
+    def stats(self, response, slot=1):
+        return {row["label"]: row["stat"] for row in response.context["slots"][slot - 1]["rows"]}
+
+    # One slot's errors.
+    def errors(self, response, slot=1):
+        return response.context["slots"][slot - 1]["errors"]
+
     # With nothing picked, the page shows six empty slots.
     def test_empty_team(self):
         response = self.get()
@@ -2080,8 +2088,8 @@ class TeamBuilderTests(TestCase):
         response = self.get(pokemon_1="garchomp")
         self.assertContains(response, "type-badge type-dragon")
         self.assertContains(response, "type-badge type-ground")
-        stats = {stat["label"]: stat["value"] for stat in response.context["slots"][0]["stats"]}
-        self.assertEqual(stats, {"HP": 108, "Atk": 130, "Def": 95, "SpA": 80, "SpD": 85, "Spe": 102})
+        base = {row["label"]: row["base"] for row in response.context["slots"][0]["rows"]}
+        self.assertEqual(base, {"HP": 108, "Atk": 130, "Def": 95, "SpA": 80, "SpD": 85, "Spe": 102})
         self.assertContains(response, "Base stat total: 600")
 
     # A team only has six slots, so anything past slot 6 is ignored.
@@ -2089,3 +2097,122 @@ class TeamBuilderTests(TestCase):
         response = self.get(pokemon_7="pikachu")
         self.assertEqual(self.team_names(response), [None] * 6)
         self.assertContains(response, "0 / 6 Pokémon")
+
+    # A new Pokémon starts at level 50 with a neutral nature, 31 IVs, 0 EVs and its first ability.
+    def test_default_set(self):
+        response = self.get(pokemon_1="garchomp")
+        self.assertEqual(self.stats(response), {"HP": 183, "Atk": 150, "Def": 115, "SpA": 100, "SpD": 105, "Spe": 122})
+        self.assertEqual(response.context["slots"][0]["ability"], "sand-veil")
+        self.assertEqual(self.errors(response), [])
+
+    # EVs and nature change the real stats. Jolly raises Speed and lowers Sp. Atk.
+    def test_evs_and_nature(self):
+        response = self.get(pokemon_1="garchomp", nature_1="jolly", ev_hp_1=4, ev_atk_1=252, ev_spe_1=252)
+        self.assertEqual(self.stats(response), {"HP": 184, "Atk": 182, "Def": 115, "SpA": 90, "SpD": 105, "Spe": 169})
+        marks = {row["label"]: row["nature"] for row in response.context["slots"][0]["rows"]}
+        self.assertEqual((marks["Spe"], marks["SpA"], marks["Atk"]), ("+", "-", ""))
+        self.assertEqual(response.context["slots"][0]["ev_total"], 508)
+
+    # IVs change the real stats too. 0 Speed IVs is common on slow Pokémon.
+    def test_ivs(self):
+        response = self.get(pokemon_1="garchomp", iv_spe_1=0)
+        self.assertEqual(self.stats(response)["Spe"], 107)
+
+    # Level changes the real stats.
+    def test_level(self):
+        response = self.get(pokemon_1="garchomp", level_1=1)
+        self.assertEqual(self.stats(response)["HP"], 13)
+
+    # Any of the Pokémon's abilities can be picked.
+    def test_pick_ability(self):
+        response = self.get(pokemon_1="garchomp", ability_1="rough-skin")
+        self.assertEqual(response.context["slots"][0]["ability"], "rough-skin")
+        self.assertEqual(self.errors(response), [])
+
+    # An ability the Pokémon can't have shows an error.
+    def test_wrong_ability(self):
+        response = self.get(pokemon_1="garchomp", ability_1="levitate")
+        self.assertEqual(self.errors(response), ["Ability: Garchomp can't have Levitate."])
+
+    # Items work with spaces and capitals, like "Choice Scarf".
+    def test_item(self):
+        response = self.get(pokemon_1="garchomp", item_1="Choice Scarf")
+        self.assertEqual(self.errors(response), [])
+        self.assertContains(response, 'value="Choice Scarf"')
+
+    # An item the calc doesn't know shows an error.
+    def test_unknown_item(self):
+        response = self.get(pokemon_1="garchomp", item_1="rare-candy")
+        self.assertEqual(self.errors(response), ["Item: Rare Candy isn't an item the calc knows."])
+
+    # Four moves the Pokémon can learn, including status moves like Swords Dance.
+    def test_moves(self):
+        response = self.get(pokemon_1="garchomp", move1_1="earthquake", move2_1="dragon-claw", move3_1="Swords Dance", move4_1="stone-edge")
+        self.assertEqual(self.errors(response), [])
+        self.assertEqual([move.value() for move in response.context["slots"][0]["moves"]], ["Earthquake", "Dragon Claw", "Swords Dance", "Stone Edge"])
+
+    # Each Pokémon's move list only has moves it can learn.
+    def test_move_options(self):
+        response = self.get(pokemon_1="garchomp")
+        options = response.context["slots"][0]["move_options"]
+        self.assertIn("Earthquake", options)
+        self.assertIn("Swords Dance", options)
+        self.assertNotIn("Thunderbolt", options)
+
+    # A Pokémon with no learnset can pick from every move.
+    def test_moves_without_learnset(self):
+        Learnset.objects.filter(species_id=445).delete()
+        response = self.get(pokemon_1="garchomp", move1_1="thunderbolt")
+        self.assertEqual(len(response.context["slots"][0]["move_options"]), Moves.objects.count())
+        self.assertEqual(self.errors(response), [])
+
+    # A move the Pokémon can't learn shows an error.
+    def test_unlearnable_move(self):
+        response = self.get(pokemon_1="garchomp", move1_1="thunderbolt")
+        self.assertEqual(self.errors(response), ["Move 1: Garchomp can't learn Thunderbolt."])
+
+    # A Pokémon can't know the same move twice.
+    def test_duplicate_move(self):
+        response = self.get(pokemon_1="garchomp", move1_1="earthquake", move3_1="earthquake")
+        self.assertEqual(self.errors(response), ["Move 3: Earthquake is already one of its moves."])
+
+    # EVs can't go over 252 in one stat.
+    def test_ev_limit(self):
+        response = self.get(pokemon_1="garchomp", ev_atk_1=300)
+        self.assertEqual(self.errors(response), ["Atk EVs: Ensure this value is less than or equal to 252."])
+
+    # EVs can't add up to more than 510.
+    def test_ev_total(self):
+        response = self.get(pokemon_1="garchomp", ev_hp_1=252, ev_atk_1=252, ev_spe_1=252)
+        self.assertEqual(self.errors(response), ["EVs can't add up to more than 510."])
+        self.assertContains(response, 'class="over"')
+
+    # IVs can't go over 31.
+    def test_iv_limit(self):
+        response = self.get(pokemon_1="garchomp", iv_hp_1=32)
+        self.assertEqual(self.errors(response), ["HP IVs: Ensure this value is less than or equal to 31."])
+
+    # Level can't go over 50.
+    def test_level_limit(self):
+        response = self.get(pokemon_1="garchomp", level_1=51)
+        self.assertEqual(self.errors(response), ["Level: Ensure this value is less than or equal to 50."])
+
+    # Each slot has its own set, so one slot's errors don't show up in another.
+    def test_sets_are_separate(self):
+        response = self.get(pokemon_1="garchomp", nature_1="jolly", ev_spe_1=252, pokemon_2="snorlax", ev_hp_2=300)
+        self.assertEqual(self.errors(response, 1), [])
+        self.assertEqual(self.stats(response, 1)["Spe"], 169)
+        self.assertEqual(self.errors(response, 2), ["HP EVs: Ensure this value is less than or equal to 252."])
+
+    # The boxes keep the set from the link, so a shared team opens with everything filled in.
+    def test_set_saved_in_link(self):
+        response = self.get(pokemon_1="garchomp", item_1="choice-scarf", nature_1="jolly", ev_atk_1=252)
+        self.assertContains(response, 'value="Choice Scarf"')
+        self.assertContains(response, 'value="252"')
+        self.assertContains(response, '<option value="jolly" selected>')
+
+    # An empty slot ignores anything else set for it, so it doesn't show errors.
+    def test_empty_slot_ignores_set(self):
+        response = self.get(ev_atk_1=300)
+        self.assertEqual(self.errors(response), [])
+        self.assertContains(response, "Empty slot", count=6)

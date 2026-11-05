@@ -1,6 +1,6 @@
 from django import forms
 from .damage_calculator import DamageCalculator
-from .models import Moves, Species
+from .models import Learnset, Moves, Species
 from .stats import DEFAULT_LEVEL, DEFAULT_NATURE, MAX_EV, MAX_IV, MAX_LEVEL, MIN_LEVEL, NATURES, make_build
 
 # Damage Calculator Form
@@ -181,28 +181,99 @@ def current_hp(max_hp, percent):
 # Team Builder Form
 
 TEAM_SIZE = 6
+MOVE_SLOTS = 4
 
 
-# The six slots on the team builder page. Each slot takes a Pokémon's name.
+# Every move a Pokémon can learn. Falls back to every move if it has no learnset.
+def learnable_moves(species):
+    learnset = Learnset.objects.filter(species_id=species.pokedex_id).first()
+    learned = Moves.objects.filter(name__in=learnset.moves) if learnset else Moves.objects.none()
+    return learned if learned.exists() else Moves.objects.all()
+
+
+# The six slots on the team builder page. Each slot has a Pokémon, its ability, item, level, nature, EVs, IVs and moves.
 class TeamForm(forms.Form):
-    # Adds a text box for each slot.
+    # Adds the same fields for each slot. Field names end with the slot number, like ev_atk_3.
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        text = {"autocomplete": "off", "spellcheck": "false"}
+        number = {"class": "num", "inputmode": "numeric"}
         for slot in range(1, TEAM_SIZE + 1):
-            self.fields[f"pokemon_{slot}"] = forms.CharField(label=f"Pokémon {slot}", required=False, widget=forms.TextInput(attrs={"list": "pokemon-names", "autocomplete": "off", "spellcheck": "false", "placeholder": "Pick a Pokémon", "data-slug": True}))
+            self.fields[f"pokemon_{slot}"] = forms.CharField(label="Pokémon", required=False, widget=forms.TextInput(attrs={**text, "list": "pokemon-names", "placeholder": "Pick a Pokémon", "data-slug": True}))
+            self.fields[f"ability_{slot}"] = forms.CharField(label="Ability", required=False)
+            self.fields[f"item_{slot}"] = forms.CharField(label="Item", required=False, widget=forms.TextInput(attrs={**text, "list": "item-names", "placeholder": "No item", "data-slug": True}))
+            self.fields[f"level_{slot}"] = forms.IntegerField(label="Level", min_value=MIN_LEVEL, max_value=MAX_LEVEL, initial=DEFAULT_LEVEL, required=False, widget=forms.NumberInput(attrs={**number, "data-default": DEFAULT_LEVEL}))
+            self.fields[f"nature_{slot}"] = forms.ChoiceField(label="Nature", choices=NATURE_CHOICES, initial=DEFAULT_NATURE, required=False, widget=forms.Select(attrs={"data-default": DEFAULT_NATURE}))
+            for key, stat in STAT_KEYS.items():
+                self.fields[f"iv_{key}_{slot}"] = forms.IntegerField(label=f"{STAT_LABELS[stat]} IVs", min_value=0, max_value=MAX_IV, initial=MAX_IV, required=False, widget=forms.NumberInput(attrs={**number, "data-default": MAX_IV, "aria-label": f"{STAT_LABELS[stat]} IVs"}))
+                self.fields[f"ev_{key}_{slot}"] = forms.IntegerField(label=f"{STAT_LABELS[stat]} EVs", min_value=0, max_value=MAX_EV, initial=0, required=False, widget=forms.NumberInput(attrs={**number, "data-default": 0, "aria-label": f"{STAT_LABELS[stat]} EVs"}))
+            for move in range(1, MOVE_SLOTS + 1):
+                self.fields[f"move{move}_{slot}"] = forms.CharField(label=f"Move {move}", required=False, widget=forms.TextInput(attrs={**text, "list": f"moves-{slot}", "placeholder": "No move", "aria-label": f"Move {move}", "data-slug": True}))
 
-    # Looks up each slot's Pokémon
+    # The team's link only has the values that were changed, so this fills in the rest (level 50, neutral nature, 31 IVs, 0 EVs).
+    @classmethod
+    def with_defaults(cls, data):
+        defaults = {name: field.initial for name, field in cls().fields.items() if field.initial is not None}
+        return {**defaults, **data.dict()}
+
+    # Checks every slot. Like in real formats, a team can't have the same Pokémon twice.
     def clean(self):
         data = super().clean()
         team = []
         for slot in range(1, TEAM_SIZE + 1):
-            typed = (data.get(f"pokemon_{slot}") or "").strip()
-            species = Species.objects.filter(name=slug(typed)).first() if typed else None
-            if typed and species is None:
-                self.add_error(f"pokemon_{slot}", f"{typed} isn't a Pokémon.")
-            elif species is not None and species in team:
-                self.add_error(f"pokemon_{slot}", f"{pretty(species.name)} is already on your team.")
-                species = None
+            species = self.clean_pokemon(data, slot, team)
+            if species is not None:
+                self.clean_set(data, slot, species)
             team.append(species)
         data["team"] = team
         return data
+
+    # Looks up a slot's Pokémon. Returns None if the slot is empty, the name is wrong or the Pokémon is already on the team.
+    def clean_pokemon(self, data, slot, team):
+        typed = (data.get(f"pokemon_{slot}") or "").strip()
+        species = Species.objects.filter(name=slug(typed)).first() if typed else None
+        if typed and species is None:
+            self.add_error(f"pokemon_{slot}", f"{typed} isn't a Pokémon.")
+        elif species is not None and species in team:
+            self.add_error(f"pokemon_{slot}", f"{pretty(species.name)} is already on your team.")
+            return None
+        return species
+
+    # Checks a slot's ability, item, moves, EVs and IVs. A Pokémon can't know the same move twice.
+    def clean_set(self, data, slot, species):
+        ability = data.get(f"ability_{slot}")
+        if ability and ability not in species.abilities:
+            self.add_error(f"ability_{slot}", f"{pretty(species.name)} can't have {pretty(ability)}.")
+        typed_item = data.get(f"item_{slot}") or ""
+        if slug(typed_item) and slug(typed_item) not in ITEMS:
+            self.add_error(f"item_{slot}", f"{typed_item} isn't an item the calc knows.")
+        moves = learnable_moves(species)
+        picked = []
+        for move in range(1, MOVE_SLOTS + 1):
+            name = slug(data.get(f"move{move}_{slot}"))
+            if not name:
+                continue
+            if not moves.filter(name=name).exists():
+                self.add_error(f"move{move}_{slot}", f"{pretty(species.name)} can't learn {pretty(name)}.")
+            elif name in picked:
+                self.add_error(f"move{move}_{slot}", f"{pretty(name)} is already one of its moves.")
+            picked.append(name)
+        try:
+            data[f"build_{slot}"] = make_build(self.build(slot, data))
+        except ValueError as error:
+            self.add_error(f"pokemon_{slot}", str(error))
+
+    # One slot's level, nature, EVs and IVs, in the format make_build takes. Blank fields use the defaults.
+    def build(self, slot, data):
+        evs = {stat: data.get(f"ev_{key}_{slot}") or 0 for key, stat in STAT_KEYS.items()}
+        ivs = {stat: MAX_IV if data.get(f"iv_{key}_{slot}") is None else data[f"iv_{key}_{slot}"] for key, stat in STAT_KEYS.items()}
+        return {"level": data.get(f"level_{slot}") or DEFAULT_LEVEL, "nature": data.get(f"nature_{slot}") or DEFAULT_NATURE, "evs": evs, "ivs": ivs}
+
+    # A slot's errors with the field they're for, like "Atk EVs: Ensure this value is less than or equal to 252." An empty slot only shows errors about its Pokémon.
+    def slot_errors(self, slot, has_pokemon):
+        messages = []
+        for name, errors in self.errors.items():
+            if name.endswith(f"_{slot}") and (has_pokemon or name.startswith("pokemon_")):
+                label = None if name.startswith("pokemon_") else self.fields[name].label
+                messages += [f"{label}: {error}" if label else error for error in errors]
+        return messages
