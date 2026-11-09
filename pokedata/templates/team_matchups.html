@@ -1,0 +1,60 @@
+{% if rows and enemies %}
+<div class="grid-scroll">
+  <table class="matchup-grid">
+    <thead>
+      <tr>
+        <th scope="col" class="corner">Your team vs. enemy team</th>
+        {% for enemy in enemies %}
+        <th scope="col">
+          <img src="{{ enemy.species.sprite }}" alt="" width="48" height="48" onerror="this.style.visibility='hidden'">
+          <span>{{ enemy.name }}</span>
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <th scope="row">
+          <img src="{{ row.species.sprite }}" alt="" width="48" height="48" onerror="this.style.visibility='hidden'">
+          <span>{{ row.name }}</span>
+        </th>
+        {% for cell in row.cells %}
+        <td>
+          {% if cell.yours %}
+          <a class="hit yours {{ cell.yours.ko }}" href="{{ cell.yours.link }}">
+            <span class="hit-who">You</span><span class="hit-move">{{ cell.yours.move }}</span>
+            <span class="hit-range">{{ cell.yours.result.min_percent|floatformat:"-1" }}–{{ cell.yours.result.max_percent|floatformat:"-1" }}%</span>
+            <span class="hit-ko">{{ cell.yours.result.ko_chance }}</span>
+          </a>
+          {% else %}
+          <span class="hit-none">You: no damaging moves</span>
+          {% endif %}
+          {% if cell.theirs %}
+          <a class="hit theirs {{ cell.theirs.ko }}" href="{{ cell.theirs.link }}">
+            <span class="hit-who">It</span><span class="hit-move">{{ cell.theirs.move }}</span>
+            <span class="hit-range">{{ cell.theirs.result.min_percent|floatformat:"-1" }}–{{ cell.theirs.result.max_percent|floatformat:"-1" }}%</span>
+            <span class="hit-ko">{{ cell.theirs.result.ko_chance }}</span>
+          </a>
+          {% else %}
+          <span class="hit-none">It: no damaging moves</span>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="grid-key">
+  <span class="key-swatch yours"></span>You can KO it
+  <span class="key-swatch theirs"></span>It can KO you
+  <span class="key-note">Darker means a one-hit KO. Click any hit to open that calc.</span>
+</p>
+{% elif not team_count and not enemy_count %}
+<p class="matchup-empty">Pick Pokémon for both teams to see the matchups.</p>
+{% elif not enemy_count %}
+<p class="matchup-empty">Add Pokémon to the enemy team to see how your team does against them.</p>
+{% else %}
+<p class="matchup-empty">Add Pokémon to your team to see how they do against the enemy team.</p>
+{% endif %}

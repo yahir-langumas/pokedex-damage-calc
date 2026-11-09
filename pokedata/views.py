@@ -2,10 +2,10 @@ from urllib.parse import urlencode
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
-from .damage_calculator import PHYSICAL_DEFENSE_SPECIAL_MOVES
+from .damage_calculator import PHYSICAL_DEFENSE_SPECIAL_MOVES, DamageCalculator
 from .forms import ENEMY, ITEMS, MOVE_SLOTS, STAT_KEYS, STAT_LABELS, TEAM_SIZE, DamageCalcForm, TeamForm, learnable_moves, pretty, slug, team_slots
 from .models import Learnset, Moves, Species
-from .stats import DEFAULT_LEVEL, NATURES, calculate_stats
+from .stats import DEFAULT_LEVEL, DEFAULT_NATURE, MAX_IV, NATURES, calculate_stats
 
 
 # Shows names the way people read them, like "Choice Scarf" instead of "choice-scarf". The forms turn them back into database names.
@@ -31,9 +31,7 @@ def pokemon_table(request):
 # The team builder page. Pick up to six Pokémon for your team and six for the enemy team, and set each one's ability, item, nature, EVs, IVs and moves.
 # The URL saves both teams so they can be shared.
 def team_builder(request):
-    names = [f"{field}_{slot}" for slot in team_slots() + team_slots(ENEMY) for field in ("pokemon", "item", *[f"move{move}" for move in range(1, MOVE_SLOTS + 1)])]
-    form = TeamForm(display_names(TeamForm.with_defaults(request.GET), names))
-    form.is_valid()
+    form = team_form(request)
     team, enemy_team = form.cleaned_data["team"], form.cleaned_data["enemy_team"]
     context = {
         "slots": [team_slot(form, slot, species) for slot, species in zip(team_slots(), team)],
@@ -47,6 +45,85 @@ def team_builder(request):
         "items": [pretty(item) for item in ITEMS],
     }
     return render(request, "team_builder.html", context)
+
+
+# Both teams from the URL, checked. The team builder page and the matchup grid both use this.
+def team_form(request):
+    names = [f"{field}_{slot}" for slot in team_slots() + team_slots(ENEMY) for field in ("pokemon", "item", *[f"move{move}" for move in range(1, MOVE_SLOTS + 1)])]
+    form = TeamForm(display_names(TeamForm.with_defaults(request.GET), names))
+    form.is_valid()
+    return form
+
+
+# The matchup grid for the team builder. It loads on its own after the page, since it runs a damage calc for every pair of Pokémon.
+def team_matchups(request):
+    form = team_form(request)
+    return render(request, "team_matchups.html", matchup_grid(form))
+
+
+# Your team against the enemy team: for each pair, your best hit on the enemy and its best hit on you. Slots with errors are left out.
+def matchup_grid(form):
+    data = form.cleaned_data
+    yours = ready_slots(form, team_slots(), data["team"])
+    enemies = ready_slots(form, team_slots(ENEMY), data["enemy_team"])
+    rows = []
+    for slot, species in yours:
+        cells = [{"yours": best_hit(data, slot, enemy), "theirs": best_hit(data, enemy, slot)} for enemy, enemy_species in enemies]
+        rows.append({"slot": slot, "species": species, "name": pretty(species.name), "cells": cells})
+    return {"rows": rows, "enemies": [{"slot": slot, "species": species, "name": pretty(species.name)} for slot, species in enemies],
+            "team_count": len(yours), "enemy_count": len(enemies)}
+
+
+# One team's slots that have a Pokémon and no mistakes in its set.
+def ready_slots(form, slots, team):
+    return [(slot, species) for slot, species in zip(slots, team) if species is not None and not form.slot_errors(slot, True)]
+
+
+# The attacker's strongest move on the defender, at full HP with no weather, terrain, boosts or screens. None if it has no damaging moves picked.
+def best_hit(data, attacker, defender):
+    best = None
+    for move in data[f"moves_{attacker}"]:
+        if move.damage_class == "status":
+            continue
+        calc = DamageCalculator(data[f"species_{attacker}"], data[f"species_{defender}"], move.type, move.power, move.name, None, None, None, None,
+                                data[f"ability_{attacker}"], data[f"ability_{defender}"], data[f"item_{attacker}"], data[f"item_{defender}"],
+                                data[f"build_{attacker}"], data[f"build_{defender}"])
+        result = calc.calculate()
+        if best is None or (result["max_damage"], result["min_damage"]) > (best["result"]["max_damage"], best["result"]["min_damage"]):
+            best = {"move": pretty(move.name), "result": result, "link": calc_link(data, attacker, defender, move)}
+    if best is not None:
+        best["ko"] = ko_class(best["result"]["ko_chance"])
+    return best
+
+
+# A link that opens the same calc on the damage calculator page. Only values that aren't the defaults go in the link.
+def calc_link(data, attacker, defender, move):
+    params = {"move": move.name}
+    for side, slot in (("attacker", attacker), ("defender", defender)):
+        build = data[f"build_{slot}"]
+        params[f"{side}_pokemon"] = data[f"species_{slot}"].name
+        params[f"{side}_ability"] = data[f"ability_{slot}"]
+        if data[f"item_{slot}"]:
+            params[f"{side}_item"] = data[f"item_{slot}"]
+        if build["level"] != DEFAULT_LEVEL:
+            params[f"{side}_level"] = build["level"]
+        if build["nature"] != DEFAULT_NATURE:
+            params[f"{side}_nature"] = build["nature"]
+        for key, stat in STAT_KEYS.items():
+            if build["ivs"][stat] != MAX_IV:
+                params[f"{side}_iv_{key}"] = build["ivs"][stat]
+            if build["evs"][stat]:
+                params[f"{side}_ev_{key}"] = build["evs"][stat]
+    return f"{reverse('damage_calculator')}?{urlencode(params)}"
+
+
+# How strong a hit is, for coloring it: "ko-1" if it can KO in one hit, "ko-2" if it can KO in two.
+def ko_class(ko_chance):
+    if "OHKO" in ko_chance:
+        return "ko-1"
+    if "2HKO" in ko_chance:
+        return "ko-2"
+    return ""
 
 
 # A link to the team builder that keeps only one team, for the Clear buttons.

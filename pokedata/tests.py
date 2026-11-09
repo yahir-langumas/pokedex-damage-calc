@@ -2415,3 +2415,213 @@ class EnemyTeamTests(TestCase):
         response = self.get(pokemon_1="garchomp", ev_atk_1=252, pokemon_e1="heatran", ev_spa_e1=252)
         self.assertEqual(response.context["clear_team_link"], reverse("team_builder") + "?pokemon_e1=heatran&ev_spa_e1=252")
         self.assertEqual(response.context["clear_enemy_link"], reverse("team_builder") + "?pokemon_1=garchomp&ev_atk_1=252")
+
+
+class MatchupGridTests(TestCase):
+    fixtures = ["pokedata"]
+
+    # Your Garchomp and Gengar against an enemy Heatran and Rotom, used by most of these tests.
+    TEAMS = {"pokemon_1": "garchomp", "move1_1": "dragon-claw", "move2_1": "earthquake", "item_1": "choice-band", "nature_1": "adamant", "ev_atk_1": 252,
+             "pokemon_2": "gengar", "move1_2": "shadow-ball", "move2_2": "sludge-bomb",
+             "pokemon_e1": "heatran", "move1_e1": "magma-storm", "move2_e1": "earth-power", "ev_hp_e1": 252,
+             "pokemon_e2": "rotom", "move1_e2": "thunderbolt"}
+
+    # Loads the matchup grid for the given slots.
+    def get(self, **slots):
+        return self.client.get(reverse("team_matchups"), slots)
+
+    # The grid's rows, one for each of your Pokémon.
+    def rows(self, response):
+        return response.context["rows"]
+
+    # One square of the grid: your Pokémon in row, against the enemy in column.
+    def cell(self, response, row, column):
+        return response.context["rows"][row]["cells"][column]
+
+    # Opens a hit's link on the damage calculator page and returns that calc's result.
+    def calc_page_result(self, hit):
+        return self.client.get(hit["link"]).context["result"]
+
+    # The team builder page has a spot for the grid, which loads it from its own URL.
+    def test_page_loads_grid_separately(self):
+        response = self.client.get(reverse("team_builder"))
+        self.assertContains(response, 'id="matchups"')
+        self.assertContains(response, f'data-url="{reverse("team_matchups")}"')
+
+    # The grid is just the grid, not a whole page with the nav bar.
+    def test_grid_is_a_fragment(self):
+        response = self.get(**self.TEAMS)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "<nav>")
+        self.assertContains(response, '<table class="matchup-grid">')
+
+    # With no Pokémon picked, the grid says to pick both teams.
+    def test_no_teams(self):
+        response = self.get()
+        self.assertContains(response, "Pick Pokémon for both teams to see the matchups.")
+
+    # With only your team, the grid asks for enemies.
+    def test_only_your_team(self):
+        response = self.get(pokemon_1="garchomp")
+        self.assertContains(response, "Add Pokémon to the enemy team to see how your team does against them.")
+
+    # With only the enemy team, the grid asks for your team.
+    def test_only_enemy_team(self):
+        response = self.get(pokemon_e1="heatran")
+        self.assertContains(response, "Add Pokémon to your team to see how they do against the enemy team.")
+
+    # There's a row for each of your Pokémon and a column for each enemy.
+    def test_grid_size(self):
+        response = self.get(pokemon_1="garchomp", pokemon_2="gengar", pokemon_e1="heatran", pokemon_e2="rotom", pokemon_e3="toxapex")
+        self.assertEqual(len(self.rows(response)), 2)
+        self.assertEqual([len(row["cells"]) for row in self.rows(response)], [3, 3])
+
+    # Rows and columns go in slot order and skip empty slots.
+    def test_slot_order(self):
+        response = self.get(pokemon_2="gengar", pokemon_5="garchomp", pokemon_e3="rotom", pokemon_e1="heatran")
+        self.assertEqual([row["slot"] for row in self.rows(response)], ["2", "5"])
+        self.assertEqual([enemy["slot"] for enemy in response.context["enemies"]], ["e1", "e3"])
+
+    # Your best hit is your strongest move. Earthquake beats Dragon Claw on Heatran.
+    def test_your_best_hit(self):
+        yours = self.cell(self.get(**self.TEAMS), 0, 0)["yours"]
+        self.assertEqual((yours["move"], yours["result"]["ko_chance"]), ("Earthquake", "Guaranteed OHKO"))
+
+    # The enemy's best hit uses its own moves. Earth Power hits Gengar harder than Magma Storm.
+    def test_their_best_hit(self):
+        theirs = self.cell(self.get(**self.TEAMS), 1, 0)["theirs"]
+        self.assertEqual((theirs["move"], theirs["result"]["ko_chance"]), ("Earth Power", "Guaranteed 2HKO"))
+
+    # Each square is its own matchup. Rotom's Levitate stops Earthquake, so Garchomp's best hit on it is Dragon Claw.
+    def test_each_square_is_its_own_matchup(self):
+        response = self.get(**self.TEAMS)
+        self.assertEqual(self.cell(response, 0, 0)["yours"]["move"], "Earthquake")
+        self.assertEqual(self.cell(response, 0, 1)["yours"]["move"], "Dragon Claw")
+
+    # A move that can't hurt the enemy never wins. Sludge Bomb can't touch Steel types, so Gengar's best hit on Heatran is Shadow Ball.
+    def test_immune_move_loses(self):
+        self.assertEqual(self.cell(self.get(**self.TEAMS), 1, 0)["yours"]["move"], "Shadow Ball")
+
+    # If every move does nothing, the hit says so. Rotom's Thunderbolt can't hurt Garchomp.
+    def test_no_damage(self):
+        theirs = self.cell(self.get(**self.TEAMS), 0, 1)["theirs"]
+        self.assertEqual((theirs["move"], theirs["result"]["max_damage"], theirs["result"]["ko_chance"]), ("Thunderbolt", 0, "No damage"))
+
+    # Every square gives the same numbers as the damage calculator page, both ways.
+    def test_every_square_matches_calc_page(self):
+        for row in self.rows(self.get(**self.TEAMS)):
+            for cell in row["cells"]:
+                for hit in (cell["yours"], cell["theirs"]):
+                    page = self.calc_page_result(hit)
+                    self.assertEqual((page["min_damage"], page["max_damage"], page["ko_chance"]), (hit["result"]["min_damage"], hit["result"]["max_damage"], hit["result"]["ko_chance"]))
+
+    # Your hit's link has your set as the attacker and the enemy's set as the defender.
+    def test_your_link_has_both_sets(self):
+        link = self.cell(self.get(**self.TEAMS), 0, 0)["yours"]["link"]
+        for part in ("move=earthquake", "attacker_pokemon=garchomp", "attacker_item=choice-band", "attacker_nature=adamant", "attacker_ev_atk=252", "defender_pokemon=heatran", "defender_ev_hp=252"):
+            self.assertIn(part, link)
+
+    # The enemy's hit's link has the enemy as the attacker.
+    def test_their_link_swaps_sides(self):
+        link = self.cell(self.get(**self.TEAMS), 0, 0)["theirs"]["link"]
+        for part in ("move=earth-power", "attacker_pokemon=heatran", "attacker_ev_hp=252", "defender_pokemon=garchomp", "defender_item=choice-band"):
+            self.assertIn(part, link)
+
+    # Links leave out values that are the defaults, so they stay short.
+    def test_links_leave_out_defaults(self):
+        link = self.cell(self.get(**self.TEAMS), 0, 0)["yours"]["link"]
+        for part in ("_iv_", "_level", "defender_nature", "defender_item"):
+            self.assertNotIn(part, link)
+
+    # A Pokémon with no moves picked says so instead of showing a hit.
+    def test_no_moves_picked(self):
+        response = self.get(pokemon_1="garchomp", pokemon_e1="heatran", move1_e1="earth-power")
+        self.assertIsNone(self.cell(response, 0, 0)["yours"])
+        self.assertContains(response, "You: no damaging moves")
+
+    # Status moves like Swords Dance don't count as hits.
+    def test_status_moves_only(self):
+        response = self.get(pokemon_1="garchomp", move1_1="swords-dance", pokemon_e1="heatran", move1_e1="stealth-rock")
+        self.assertIsNone(self.cell(response, 0, 0)["yours"])
+        self.assertContains(response, "It: no damaging moves")
+
+    # The enemy's ability counts. Bronzong's Levitate stops Earthquake, but Heatproof doesn't.
+    def test_enemy_ability_counts(self):
+        levitate = self.cell(self.get(pokemon_1="garchomp", move1_1="earthquake", pokemon_e1="bronzong"), 0, 0)["yours"]
+        heatproof = self.cell(self.get(pokemon_1="garchomp", move1_1="earthquake", pokemon_e1="bronzong", ability_e1="heatproof"), 0, 0)["yours"]
+        self.assertEqual(levitate["result"]["max_damage"], 0)
+        self.assertEqual(heatproof["result"]["max_damage"], 150)
+
+    # Your item counts. Choice Band makes Garchomp's Earthquake hit harder.
+    def test_your_item_counts(self):
+        plain = self.cell(self.get(pokemon_1="garchomp", move1_1="earthquake", pokemon_e1="heatran"), 0, 0)["yours"]
+        banded = self.cell(self.get(pokemon_1="garchomp", move1_1="earthquake", item_1="choice-band", pokemon_e1="heatran"), 0, 0)["yours"]
+        self.assertGreater(banded["result"]["max_damage"], plain["result"]["max_damage"])
+
+    # The enemy's item counts. Assault Vest makes Heatran take less from Shadow Ball.
+    def test_enemy_item_counts(self):
+        plain = self.cell(self.get(pokemon_1="gengar", move1_1="shadow-ball", pokemon_e1="heatran"), 0, 0)["yours"]
+        vest = self.cell(self.get(pokemon_1="gengar", move1_1="shadow-ball", pokemon_e1="heatran", item_e1="assault-vest"), 0, 0)["yours"]
+        self.assertLess(vest["result"]["max_damage"], plain["result"]["max_damage"])
+
+    # Natures count. Adamant makes Garchomp's Earthquake hit harder than a neutral nature.
+    def test_nature_counts(self):
+        neutral = self.cell(self.get(pokemon_1="garchomp", move1_1="earthquake", pokemon_e1="tyranitar"), 0, 0)["yours"]
+        adamant = self.cell(self.get(pokemon_1="garchomp", move1_1="earthquake", nature_1="adamant", pokemon_e1="tyranitar"), 0, 0)["yours"]
+        self.assertGreater(adamant["result"]["max_damage"], neutral["result"]["max_damage"])
+
+    # The enemy's EVs count. 252 HP EVs make Heatran take a smaller % of its HP.
+    def test_enemy_evs_count(self):
+        frail = self.cell(self.get(pokemon_1="gengar", move1_1="shadow-ball", pokemon_e1="heatran"), 0, 0)["yours"]
+        bulky = self.cell(self.get(pokemon_1="gengar", move1_1="shadow-ball", pokemon_e1="heatran", ev_hp_e1=252), 0, 0)["yours"]
+        self.assertLess(bulky["result"]["max_percent"], frail["result"]["max_percent"])
+
+    # Levels count. A level 1 enemy takes a bigger % of its HP than a level 50 one.
+    def test_level_counts(self):
+        level_50 = self.cell(self.get(pokemon_1="gengar", move1_1="shadow-ball", pokemon_e1="heatran"), 0, 0)["yours"]
+        level_1 = self.cell(self.get(pokemon_1="gengar", move1_1="shadow-ball", pokemon_e1="heatran", level_e1=1), 0, 0)["yours"]
+        self.assertGreater(level_1["result"]["max_percent"], level_50["result"]["max_percent"])
+
+    # Hits that can KO get colored: one-hit KOs as ko-1 and two-hit KOs as ko-2.
+    def test_ko_colors(self):
+        response = self.get(**self.TEAMS)
+        self.assertEqual(self.cell(response, 0, 0)["yours"]["ko"], "ko-1")
+        self.assertEqual(self.cell(response, 1, 0)["theirs"]["ko"], "ko-2")
+        self.assertContains(response, 'class="hit yours ko-1"')
+        self.assertContains(response, 'class="hit theirs ko-2"')
+
+    # The same Pokémon can be on both teams.
+    def test_mirror_match(self):
+        response = self.get(pokemon_1="garchomp", move1_1="earthquake", pokemon_e1="garchomp", move1_e1="earthquake")
+        cell = self.cell(response, 0, 0)
+        self.assertEqual((cell["yours"]["move"], cell["theirs"]["move"]), ("Earthquake", "Earthquake"))
+
+    # One of your Pokémon with a mistake in its set is left out of the grid until it's fixed.
+    def test_your_errors_left_out(self):
+        response = self.get(pokemon_1="garchomp", pokemon_2="gengar", ev_hp_2=300, pokemon_e1="heatran")
+        self.assertEqual([row["slot"] for row in self.rows(response)], ["1"])
+
+    # An enemy with a mistake in its set is left out of the grid until it's fixed.
+    def test_enemy_errors_left_out(self):
+        response = self.get(pokemon_1="garchomp", pokemon_e1="heatran", move1_e1="thunderbolt", pokemon_e2="rotom")
+        self.assertEqual([enemy["slot"] for enemy in response.context["enemies"]], ["e2"])
+
+    # The grid shows readable names.
+    def test_readable_names(self):
+        response = self.get(pokemon_1="iron-valiant", pokemon_e1="landorus-incarnate")
+        self.assertContains(response, "<span>Iron Valiant</span>")
+        self.assertContains(response, "<span>Landorus Incarnate</span>")
+
+    # Two full teams, each Pokémon with four moves, give a full 6 by 6 grid.
+    def test_full_teams(self):
+        team = {"garchomp": ["earthquake", "dragon-claw", "stone-edge", "fire-fang"], "tyranitar": ["stone-edge", "crunch", "earthquake", "dragon-dance"],
+                "gengar": ["shadow-ball", "sludge-bomb", "focus-blast", "thunderbolt"], "dragonite": ["outrage", "extreme-speed", "earthquake", "dragon-dance"],
+                "snorlax": ["body-slam", "crunch", "earthquake", "curse"], "pikachu": ["thunderbolt", "iron-tail", "quick-attack", "volt-switch"]}
+        slots = {}
+        for number, (name, moves) in enumerate(team.items(), start=1):
+            for prefix in ("", "e"):
+                slots[f"pokemon_{prefix}{number}"] = name
+                slots.update({f"move{move}_{prefix}{number}": move_name for move, move_name in enumerate(moves, start=1)})
+        rows = self.rows(self.get(**slots))
+        self.assertEqual([len(row["cells"]) for row in rows], [6] * 6)
+        self.assertTrue(all(cell["yours"] and cell["theirs"] for row in rows for cell in row["cells"]))

@@ -251,6 +251,7 @@ class TeamForm(forms.Form):
         return species
 
     # Checks a slot's ability, item, moves, EVs and IVs. A Pokémon can't know the same move twice.
+    # Keeps the slot's Pokémon, ability, item and moves in cleaned_data, so the matchups can use them.
     def clean_set(self, data, slot, species):
         ability = data.get(f"ability_{slot}")
         if ability and ability not in species.abilities:
@@ -264,11 +265,17 @@ class TeamForm(forms.Form):
             name = slug(data.get(f"move{move}_{slot}"))
             if not name:
                 continue
-            if not moves.filter(name=name).exists():
+            learned = moves.filter(name=name).first()
+            if learned is None:
                 self.add_error(f"move{move}_{slot}", f"{pretty(species.name)} can't learn {pretty(name)}.")
-            elif name in picked:
+            elif learned in picked:
                 self.add_error(f"move{move}_{slot}", f"{pretty(name)} is already one of its moves.")
-            picked.append(name)
+            else:
+                picked.append(learned)
+        data[f"species_{slot}"] = species
+        data[f"ability_{slot}"] = ability if ability in species.abilities else species.abilities[0]
+        data[f"item_{slot}"] = slug(typed_item) or None
+        data[f"moves_{slot}"] = picked
         try:
             data[f"build_{slot}"] = make_build(self.build(slot, data))
         except ValueError as error:
