@@ -182,6 +182,12 @@ def current_hp(max_hp, percent):
 
 TEAM_SIZE = 6
 MOVE_SLOTS = 4
+ENEMY = "e"
+
+
+# The slots for one team. Your team's slots are 1 to 6, and the enemy team's are e1 to e6.
+def team_slots(prefix=""):
+    return [f"{prefix}{number}" for number in range(1, TEAM_SIZE + 1)]
 
 
 # Every move a Pokémon can learn. Falls back to every move if it has no learnset.
@@ -191,14 +197,14 @@ def learnable_moves(species):
     return learned if learned.exists() else Moves.objects.all()
 
 
-# The six slots on the team builder page. Each slot has a Pokémon, its ability, item, level, nature, EVs, IVs and moves.
+# Your team's six slots and the enemy team's six slots. Each slot has a Pokémon, its ability, item, level, nature, EVs, IVs and moves.
 class TeamForm(forms.Form):
-    # Adds the same fields for each slot. Field names end with the slot number, like ev_atk_3.
+    # Adds the same fields for each slot. Field names end with the slot, like ev_atk_3 for your team or ev_atk_e3 for the enemy team.
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         text = {"autocomplete": "off", "spellcheck": "false"}
         number = {"class": "num", "inputmode": "numeric"}
-        for slot in range(1, TEAM_SIZE + 1):
+        for slot in team_slots() + team_slots(ENEMY):
             self.fields[f"pokemon_{slot}"] = forms.CharField(label="Pokémon", required=False, widget=forms.TextInput(attrs={**text, "list": "pokemon-names", "placeholder": "Pick a Pokémon", "data-slug": True}))
             self.fields[f"ability_{slot}"] = forms.CharField(label="Ability", required=False)
             self.fields[f"item_{slot}"] = forms.CharField(label="Item", required=False, widget=forms.TextInput(attrs={**text, "list": "item-names", "placeholder": "No item", "data-slug": True}))
@@ -216,26 +222,31 @@ class TeamForm(forms.Form):
         defaults = {name: field.initial for name, field in cls().fields.items() if field.initial is not None}
         return {**defaults, **data.dict()}
 
-    # Checks every slot. Like in real formats, a team can't have the same Pokémon twice.
+    # Checks both teams.
     def clean(self):
         data = super().clean()
+        data["team"] = self.clean_team(data, team_slots(), "your team")
+        data["enemy_team"] = self.clean_team(data, team_slots(ENEMY), "the enemy team")
+        return data
+
+    # Checks one team's slots. Like in real formats, a team can't have the same Pokémon twice, but the two teams can share Pokémon.
+    def clean_team(self, data, slots, team_name):
         team = []
-        for slot in range(1, TEAM_SIZE + 1):
-            species = self.clean_pokemon(data, slot, team)
+        for slot in slots:
+            species = self.clean_pokemon(data, slot, team, team_name)
             if species is not None:
                 self.clean_set(data, slot, species)
             team.append(species)
-        data["team"] = team
-        return data
+        return team
 
     # Looks up a slot's Pokémon. Returns None if the slot is empty, the name is wrong or the Pokémon is already on the team.
-    def clean_pokemon(self, data, slot, team):
+    def clean_pokemon(self, data, slot, team, team_name):
         typed = (data.get(f"pokemon_{slot}") or "").strip()
         species = Species.objects.filter(name=slug(typed)).first() if typed else None
         if typed and species is None:
             self.add_error(f"pokemon_{slot}", f"{typed} isn't a Pokémon.")
         elif species is not None and species in team:
-            self.add_error(f"pokemon_{slot}", f"{pretty(species.name)} is already on your team.")
+            self.add_error(f"pokemon_{slot}", f"{pretty(species.name)} is already on {team_name}.")
             return None
         return species
 

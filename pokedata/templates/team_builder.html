@@ -3,10 +3,17 @@
 {% block content %}
 <style>
   .team-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
-  .team-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.4rem; }
-  .team-header h1 { font-size: 1.9rem; font-weight: 800; color: #222; margin: 0; }
-  .team-count { font-size: 0.9rem; color: #888; font-weight: 600; }
+  .team-wrap h1 { font-size: 1.9rem; font-weight: 800; color: #222; margin: 0 0 0.4rem; }
   .team-note { margin: 0 0 1.5rem; color: #666; font-size: 0.92rem; line-height: 1.5; }
+  .team-section + .team-section { margin-top: 2.5rem; }
+  .team-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.9rem; }
+  .team-header h2 { font-size: 1.4rem; font-weight: 800; color: #222; margin: 0; }
+  .enemy-section .team-header h2 { color: #b3261e; }
+  .team-tools { display: flex; align-items: baseline; gap: 1rem; }
+  .team-count { font-size: 0.9rem; color: #888; font-weight: 600; }
+  .clear-link { font-size: 0.85rem; font-weight: 700; color: #555; text-decoration: none; padding: 0.35rem 0.8rem; border: 2px solid #e5e5e5; border-radius: 8px; background: #fff; }
+  .clear-link:hover { border-color: #ccc; }
+  .enemy-card { border-color: #f3c9c4; }
   .team-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; align-items: start; }
   .slot-card { background: #ffffff; border: 1px solid #eee; border-radius: 14px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); min-width: 0; }
   .slot-label, .field > span, .moves-label { display: block; font-size: 0.75rem; font-weight: 700; color: #777; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.35rem; }
@@ -39,9 +46,6 @@
   .ev-total { text-align: right; font-size: 0.78rem; font-weight: 700; color: #999; margin: 0.35rem 0 0.75rem; min-height: 1em; }
   .ev-total .over { color: #b3261e; }
   .move-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; }
-  .team-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-top: 1.25rem; }
-  .btn { display: inline-block; padding: 0.75rem 1.5rem; border-radius: 10px; font-weight: 700; font-size: 0.95rem; text-decoration: none; }
-  .btn-secondary { background: #ffffff; color: #333; border: 2px solid #e5e5e5; }
 
   @media (max-width: 1100px) {
     .team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -74,98 +78,39 @@
 </style>
 
 <div class="team-wrap">
-  <div class="team-header">
-    <h1>Team Builder</h1>
-    <span class="team-count" id="team-count" data-live>{{ team_count }} / {{ team_size }} Pokémon</span>
-  </div>
-  <p class="team-note">Pick up to six Pokémon and set each one's ability, item, nature, EVs, IVs and moves. The link in your address bar saves your team, so you can bookmark it or share it.</p>
+  <h1>Team Builder</h1>
+  <p class="team-note">Pick up to six Pokémon for your team and six for the enemy team, and set each one's ability, item, nature, EVs, IVs and moves. The link in your address bar saves both teams, so you can bookmark it or share it.</p>
 
   <form id="team-form" method="get" action="{% url 'team_builder' %}">
-    <div class="team-grid">
-      {% for slot in slots %}
-      <section class="slot-card">
-        <label class="slot-label" for="{{ slot.field.id_for_label }}">Slot {{ slot.number }}</label>
-        <div class="slot-input">
-          {{ slot.field }}
-          <button type="button" class="slot-clear" data-slot="{{ slot.field.id_for_label }}" data-number="{{ slot.number }}" aria-label="Remove Pokémon {{ slot.number }}">×</button>
+    <section class="team-section">
+      <div class="team-header">
+        <h2>Your Team</h2>
+        <div class="team-tools" id="team-tools" data-live>
+          <span class="team-count">{{ team_count }} / {{ team_size }} Pokémon</span>
+          <a class="clear-link" href="{{ clear_team_link }}">Clear your team</a>
         </div>
-        <ul class="slot-errors" id="slot-{{ slot.number }}-errors" data-live>{% for error in slot.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+      </div>
+      <div class="team-grid">
+        {% for slot in slots %}
+        {% include "team_slot.html" %}
+        {% endfor %}
+      </div>
+    </section>
 
-        <div id="slot-{{ slot.number }}" data-species="{{ slot.species.name|default:'' }}">
-          {% if slot.species %}
-          <div class="slot-info">
-            <img src="{{ slot.species.sprite }}" alt="{{ slot.name }}" width="72" height="72" onerror="this.style.visibility='hidden'">
-            <div>
-              <div class="slot-name">{{ slot.name }}</div>
-              <div class="dex-number">#{{ slot.species.pokedex_id }} · Base stat total: {{ slot.species.total_stats }}</div>
-              <div class="type-badges">
-                {% for type in slot.species.types %}<span class="type-badge type-{{ type }}">{{ type }}</span>{% endfor %}
-              </div>
-            </div>
-          </div>
-
-          <div class="field-row">
-            <label class="field">
-              <span>Ability</span>
-              <select name="ability_{{ slot.number }}">
-                {% for name, label in slot.abilities %}<option value="{{ name }}"{% if name == slot.ability %} selected{% endif %}>{{ label }}</option>{% endfor %}
-              </select>
-            </label>
-            <label class="field">
-              <span>Item</span>
-              {{ slot.fields.item }}
-            </label>
-          </div>
-          <div class="field-row level-row">
-            <label class="field">
-              <span>Level</span>
-              {{ slot.fields.level }}
-            </label>
-            <label class="field">
-              <span>Nature</span>
-              {{ slot.fields.nature }}
-            </label>
-          </div>
-
-          <table class="stat-table">
-            <thead>
-              <tr><th scope="col">Stat</th><th scope="col">Base</th><th scope="col">IVs</th><th scope="col">EVs</th><th scope="col">Total</th></tr>
-            </thead>
-            <tbody>
-              {% for row in slot.rows %}
-              <tr>
-                <th scope="row">{{ row.label }}</th>
-                <td class="base">{{ row.base }}</td>
-                <td>{{ row.iv }}</td>
-                <td>{{ row.ev }}</td>
-                <td class="total" id="slot-{{ slot.number }}-stat-{{ forloop.counter }}" data-live>
-                  <span class="{% if row.nature == '+' %}up{% elif row.nature == '-' %}down{% endif %}">{{ row.stat }}{{ row.nature }}</span>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          <div class="ev-total" id="slot-{{ slot.number }}-ev-total" data-live>
-            <span{% if slot.ev_total > 510 %} class="over"{% endif %}>{{ slot.ev_total }} / 510 EVs</span>
-          </div>
-
-          <span class="moves-label">Moves</span>
-          <div class="move-grid">
-            {% for move in slot.moves %}{{ move }}{% endfor %}
-          </div>
-          <datalist id="moves-{{ slot.number }}">
-            {% for name in slot.move_options %}<option value="{{ name }}">{% endfor %}
-          </datalist>
-          {% else %}
-          <p class="slot-empty">Empty slot</p>
-          {% endif %}
+    <section class="team-section enemy-section">
+      <div class="team-header">
+        <h2>Enemy Team</h2>
+        <div class="team-tools" id="enemy-tools" data-live>
+          <span class="team-count">{{ enemy_count }} / {{ team_size }} Pokémon</span>
+          <a class="clear-link" href="{{ clear_enemy_link }}">Clear enemy team</a>
         </div>
-      </section>
-      {% endfor %}
-    </div>
-    <div class="team-actions">
-      <a class="btn btn-secondary" href="{% url 'team_builder' %}">Clear team</a>
-    </div>
+      </div>
+      <div class="team-grid">
+        {% for slot in enemy_slots %}
+        {% include "team_slot.html" %}
+        {% endfor %}
+      </div>
+    </section>
   </form>
 </div>
 
@@ -240,7 +185,7 @@
       let value = Math.round(Number(input.value));
       if (input.min !== "") value = Math.max(value, Number(input.min));
       if (input.max !== "") value = Math.min(value, Number(input.max));
-      const ev = input.name.match(/^ev_\w+_(\d)$/);
+      const ev = input.name.match(/^ev_[a-z]+_(\w+)$/);
       if (ev) {
         let others = 0;
         form.querySelectorAll("input[name^='ev_'][name$='_" + ev[1] + "']").forEach(function (box) {

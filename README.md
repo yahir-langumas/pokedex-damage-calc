@@ -19,7 +19,7 @@ The damage formula is based on [Smogon's open-source damage calculator](https://
 - **Damage calculator:** pick two Pokémon, a move, and each side's build (ability, item, nature, EVs/IVs, stat boosts, status), plus weather, terrain, and screens. Results update live, and every calc has a link you can share.
 - **Results:** all 16 damage rolls, the % of HP, the KO chance, and a Smogon-style summary line.
 - **Damage engine:** the Gen 9 damage formula with all 314 abilities and 218 held items, including multi-hit moves, moves whose power changes, and battle forms.
-- **Team builder:** pick a team of up to six Pokémon and set each one's ability, item, level, nature, EVs, IVs, and moves, with its real stats updating as you go. Your team is saved in the link, so you can share it.
+- **Team builder:** pick your team and an enemy team of up to six Pokémon each, and set each one's ability, item, level, nature, EVs, IVs, and moves, with its real stats updating as you go. Both teams are saved in the link, so you can share them.
 - **Pokédex:** search all 1,025 Pokémon, with links to each one's Bulbapedia, Smogon, and Limitless VGC pages.
 - **Moves page:** every move with its type, category, power, accuracy, and PP.
 
@@ -80,11 +80,12 @@ python manage.py test
 
 Make sure `DJANGO_DEBUG` is set in your terminal first (see Getting Started).
 
-There are 340 tests covering:
+There are 370 tests covering:
 
 - **Damage engine:** type matchups, weather, terrain, abilities, held items, stats, and each step of the damage formula. I checked the full damage results against Smogon's calculator.
 - **Calculator page:** the results, form checks, and the endpoint that loads each Pokémon's abilities and moves.
 - **Team builder:** picking Pokémon, each one's set and real stats, EV and IV limits, learnable moves, and no repeats on the same team.
+- **Enemy team:** the same checks for the enemy team, plus keeping the two teams separate.
 - **Names:** every Pokémon, move, and item shows the way people read it (like "Choice Scarf"), and typing either form works.
 - **Home page and nav bar**
 - **PokeAPI import commands:** the API is faked, so the tests never make real requests.
@@ -107,10 +108,11 @@ Actively in progress.
 - [x] Damage engine: the full Gen 9 damage formula, all 314 abilities, and all 218 held items
 - [x] Damage calculator page with live results and shareable links
 - [x] Pokédex and moves page
-- [x] 340 tests running on every push with GitHub Actions
+- [x] 370 tests running on every push with GitHub Actions
 - [x] **Going live:** running in Docker on AWS Lightsail, with the link at the top of this page
 - [x] **Team builder:** pick a team of six Pokémon
 - [x] **Team sets:** pick each team member's ability, item, nature, EVs, IVs, and moves
-- [ ] **Team matchups:** check a team against other Pokémon with the damage calculator
+- [x] **Enemy team:** build an enemy team the same way as your own
+- [ ] **Team matchups:** check your team against the enemy team with the damage calculator
 - [ ] **Multi-hit moves:** pick how many times 2–5 hit moves hit (they count as 3 hits for now)
 - [ ] **Accounts and saved teams:** sign up and log in to save your teams and come back to them

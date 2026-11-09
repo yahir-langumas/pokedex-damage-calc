@@ -1,0 +1,78 @@
+<section class="slot-card{% if slot.enemy %} enemy-card{% endif %}">
+  <label class="slot-label" for="{{ slot.field.id_for_label }}">{{ slot.title }}</label>
+  <div class="slot-input">
+    {{ slot.field }}
+    <button type="button" class="slot-clear" data-slot="{{ slot.field.id_for_label }}" data-number="{{ slot.number }}" aria-label="Remove the Pokémon from {% if slot.enemy %}enemy {% endif %}{{ slot.title|lower }}">×</button>
+  </div>
+  <ul class="slot-errors" id="slot-{{ slot.number }}-errors" data-live>{% for error in slot.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+
+  <div id="slot-{{ slot.number }}" data-species="{{ slot.species.name|default:'' }}">
+    {% if slot.species %}
+    <div class="slot-info">
+      <img src="{{ slot.species.sprite }}" alt="{{ slot.name }}" width="72" height="72" onerror="this.style.visibility='hidden'">
+      <div>
+        <div class="slot-name">{{ slot.name }}</div>
+        <div class="dex-number">#{{ slot.species.pokedex_id }} · Base stat total: {{ slot.species.total_stats }}</div>
+        <div class="type-badges">
+          {% for type in slot.species.types %}<span class="type-badge type-{{ type }}">{{ type }}</span>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <label class="field">
+        <span>Ability</span>
+        <select name="ability_{{ slot.number }}">
+          {% for name, label in slot.abilities %}<option value="{{ name }}"{% if name == slot.ability %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span>Item</span>
+        {{ slot.fields.item }}
+      </label>
+    </div>
+    <div class="field-row level-row">
+      <label class="field">
+        <span>Level</span>
+        {{ slot.fields.level }}
+      </label>
+      <label class="field">
+        <span>Nature</span>
+        {{ slot.fields.nature }}
+      </label>
+    </div>
+
+    <table class="stat-table">
+      <thead>
+        <tr><th scope="col">Stat</th><th scope="col">Base</th><th scope="col">IVs</th><th scope="col">EVs</th><th scope="col">Total</th></tr>
+      </thead>
+      <tbody>
+        {% for row in slot.rows %}
+        <tr>
+          <th scope="row">{{ row.label }}</th>
+          <td class="base">{{ row.base }}</td>
+          <td>{{ row.iv }}</td>
+          <td>{{ row.ev }}</td>
+          <td class="total" id="slot-{{ slot.number }}-stat-{{ forloop.counter }}" data-live>
+            <span class="{% if row.nature == '+' %}up{% elif row.nature == '-' %}down{% endif %}">{{ row.stat }}{{ row.nature }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="ev-total" id="slot-{{ slot.number }}-ev-total" data-live>
+      <span{% if slot.ev_total > 510 %} class="over"{% endif %}>{{ slot.ev_total }} / 510 EVs</span>
+    </div>
+
+    <span class="moves-label">Moves</span>
+    <div class="move-grid">
+      {% for move in slot.moves %}{{ move }}{% endfor %}
+    </div>
+    <datalist id="moves-{{ slot.number }}">
+      {% for name in slot.move_options %}<option value="{{ name }}">{% endfor %}
+    </datalist>
+    {% else %}
+    <p class="slot-empty">{% if slot.enemy %}Empty enemy slot{% else %}Empty slot{% endif %}</p>
+    {% endif %}
+  </div>
+</section>

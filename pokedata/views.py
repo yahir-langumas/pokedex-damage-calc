@@ -1,7 +1,9 @@
+from urllib.parse import urlencode
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from .damage_calculator import PHYSICAL_DEFENSE_SPECIAL_MOVES
-from .forms import ITEMS, MOVE_SLOTS, STAT_KEYS, STAT_LABELS, TEAM_SIZE, DamageCalcForm, TeamForm, learnable_moves, pretty, slug
+from .forms import ENEMY, ITEMS, MOVE_SLOTS, STAT_KEYS, STAT_LABELS, TEAM_SIZE, DamageCalcForm, TeamForm, learnable_moves, pretty, slug, team_slots
 from .models import Learnset, Moves, Species
 from .stats import DEFAULT_LEVEL, NATURES, calculate_stats
 
@@ -26,20 +28,31 @@ def pokemon_table(request):
     return render(request, "pokemon_table.html", {"species_list": species_list})
 
 
-# The team builder page. Pick up to six Pokémon and set each one's ability, item, nature, EVs, IVs and moves. The URL saves the team so it can be shared.
+# The team builder page. Pick up to six Pokémon for your team and six for the enemy team, and set each one's ability, item, nature, EVs, IVs and moves.
+# The URL saves both teams so they can be shared.
 def team_builder(request):
-    names = [f"{field}_{number}" for number in range(1, TEAM_SIZE + 1) for field in ("pokemon", "item", *[f"move{move}" for move in range(1, MOVE_SLOTS + 1)])]
+    names = [f"{field}_{slot}" for slot in team_slots() + team_slots(ENEMY) for field in ("pokemon", "item", *[f"move{move}" for move in range(1, MOVE_SLOTS + 1)])]
     form = TeamForm(display_names(TeamForm.with_defaults(request.GET), names))
     form.is_valid()
-    team = form.cleaned_data["team"]
+    team, enemy_team = form.cleaned_data["team"], form.cleaned_data["enemy_team"]
     context = {
-        "slots": [team_slot(form, number, species) for number, species in enumerate(team, start=1)],
+        "slots": [team_slot(form, slot, species) for slot, species in zip(team_slots(), team)],
+        "enemy_slots": [team_slot(form, slot, species) for slot, species in zip(team_slots(ENEMY), enemy_team)],
         "team_count": sum(species is not None for species in team),
+        "enemy_count": sum(species is not None for species in enemy_team),
+        "clear_team_link": team_link(request.GET, keep_enemy=True),
+        "clear_enemy_link": team_link(request.GET, keep_enemy=False),
         "team_size": TEAM_SIZE,
         "species_names": species_names(),
         "items": [pretty(item) for item in ITEMS],
     }
     return render(request, "team_builder.html", context)
+
+
+# A link to the team builder that keeps only one team, for the Clear buttons.
+def team_link(query, keep_enemy):
+    kept = {name: value for name, value in query.items() if name.rsplit("_", 1)[-1].startswith(ENEMY) == keep_enemy}
+    return f"{reverse('team_builder')}?{urlencode(kept)}" if kept else reverse("team_builder")
 
 
 # Everything one team slot shows: the Pokémon, its fields, its real stats and its errors.
@@ -54,7 +67,7 @@ def team_slot(form, number, species):
                      "iv": form[f"iv_{key}_{number}"], "ev": form[f"ev_{key}_{number}"]})
     abilities = species.abilities if species else []
     picked = form.data.get(f"ability_{number}")
-    return {"number": number, "species": species, "name": pretty(species.name) if species else "", "field": form[f"pokemon_{number}"],
+    return {"number": number, "title": f"Slot {number.removeprefix(ENEMY)}", "enemy": number.startswith(ENEMY), "species": species, "name": pretty(species.name) if species else "", "field": form[f"pokemon_{number}"],
             "fields": {name: form[f"{name}_{number}"] for name in ("item", "level", "nature")},
             "abilities": [(ability, pretty(ability)) for ability in abilities], "ability": picked if picked in abilities else (abilities[0] if abilities else ""),
             "moves": [form[f"move{move}_{number}"] for move in range(1, MOVE_SLOTS + 1)],

@@ -2007,9 +2007,9 @@ class NameFormatTests(TestCase):
         self.assertContains(response, "<td>Physical</td>")
         self.assertNotContains(response, ">close-combat<")
 
-    # The name boxes are marked so the page's links use database names and stay short.
+    # The name boxes are marked so the page's links use database names and stay short. The team builder has six for each team.
     def test_name_boxes_marked_for_links(self):
-        for page, boxes in (("damage_calculator", 4), ("team_builder", 6)):
+        for page, boxes in (("damage_calculator", 4), ("team_builder", 12)):
             html = self.client.get(reverse(page)).content.decode()
             self.assertEqual(len(re.findall(r"<input[^>]*data-slug", html)), boxes)
 
@@ -2216,3 +2216,202 @@ class TeamBuilderTests(TestCase):
         response = self.get(ev_atk_1=300)
         self.assertEqual(self.errors(response), [])
         self.assertContains(response, "Empty slot", count=6)
+
+
+class EnemyTeamTests(TestCase):
+    fixtures = ["pokedata"]
+
+    # Loads the team builder with the given slots filled in. Enemy slots end in e1 to e6, like pokemon_e1.
+    def get(self, **slots):
+        return self.client.get(reverse("team_builder"), slots)
+
+    # The names in each enemy slot, or None for empty slots.
+    def enemy_names(self, response):
+        return [slot["species"].name if slot["species"] else None for slot in response.context["enemy_slots"]]
+
+    # The names in each of your slots, or None for empty slots.
+    def team_names(self, response):
+        return [slot["species"].name if slot["species"] else None for slot in response.context["slots"]]
+
+    # One enemy slot's real stats, like {"HP": 183, "Atk": 150, ...}.
+    def stats(self, response, slot=1):
+        return {row["label"]: row["stat"] for row in response.context["enemy_slots"][slot - 1]["rows"]}
+
+    # One enemy slot's errors.
+    def errors(self, response, slot=1):
+        return response.context["enemy_slots"][slot - 1]["errors"]
+
+    # With nothing picked, the page shows six empty enemy slots.
+    def test_empty_enemy_team(self):
+        response = self.get()
+        self.assertEqual(self.enemy_names(response), [None] * 6)
+        self.assertContains(response, "Empty enemy slot", count=6)
+        self.assertEqual(response.context["enemy_count"], 0)
+
+    # Picked enemies show up in their slots.
+    def test_picks_enemies(self):
+        response = self.get(pokemon_e1="heatran", pokemon_e2="rotom")
+        self.assertEqual(self.enemy_names(response), ["heatran", "rotom", None, None, None, None])
+        self.assertEqual(response.context["enemy_count"], 2)
+
+    # A full enemy team of six.
+    def test_full_enemy_team(self):
+        team = ["heatran", "rotom", "corviknight", "toxapex", "landorus-incarnate", "amoonguss"]
+        response = self.get(**{f"pokemon_e{slot}": name for slot, name in enumerate(team, start=1)})
+        self.assertEqual(self.enemy_names(response), team)
+        self.assertNotContains(response, "Empty enemy slot")
+        self.assertContains(response, "6 / 6 Pokémon")
+
+    # Enemy slots can be left empty in between.
+    def test_enemy_gaps(self):
+        response = self.get(pokemon_e2="pikachu", pokemon_e5="gengar")
+        self.assertEqual(self.enemy_names(response), [None, "pikachu", None, None, "gengar", None])
+
+    # Enemy names work with any capitals and extra spaces.
+    def test_enemy_name_cleanup(self):
+        response = self.get(pokemon_e1="  GarChomp ")
+        self.assertEqual(self.enemy_names(response)[0], "garchomp")
+
+    # Enemy boxes show names the way people read them.
+    def test_enemy_readable_names(self):
+        response = self.get(pokemon_e1="iron-valiant", item_e1="choice-specs", move1_e1="moonblast")
+        for name in ("Iron Valiant", "Choice Specs", "Moonblast"):
+            self.assertContains(response, f'value="{name}"')
+
+    # A name that isn't a Pokémon shows an error in that enemy slot.
+    def test_enemy_unknown_pokemon(self):
+        response = self.get(pokemon_e1="heatran", pokemon_e2="notamon")
+        self.assertEqual(self.errors(response, 2), ["Notamon isn't a Pokémon."])
+        self.assertEqual(self.enemy_names(response)[:2], ["heatran", None])
+
+    # Like your team, the enemy team can't have the same Pokémon twice.
+    def test_enemy_no_duplicates(self):
+        response = self.get(pokemon_e1="heatran", pokemon_e3="heatran")
+        self.assertEqual(self.errors(response, 3), ["Heatran is already on the enemy team."])
+        self.assertEqual(self.enemy_names(response), ["heatran", None, None, None, None, None])
+
+    # The enemy team can have Pokémon that are also on your team, like in a mirror match.
+    def test_enemy_can_share_with_your_team(self):
+        response = self.get(pokemon_1="garchomp", pokemon_e1="garchomp")
+        self.assertEqual(self.team_names(response)[0], "garchomp")
+        self.assertEqual(self.enemy_names(response)[0], "garchomp")
+        self.assertEqual(self.errors(response), [])
+
+    # The two teams don't mix: your picks stay on your team and enemy picks stay on the enemy team.
+    def test_teams_are_separate(self):
+        response = self.get(pokemon_1="garchomp", pokemon_e2="heatran")
+        self.assertEqual(self.team_names(response), ["garchomp", None, None, None, None, None])
+        self.assertEqual(self.enemy_names(response), [None, "heatran", None, None, None, None])
+        self.assertEqual((response.context["team_count"], response.context["enemy_count"]), (1, 1))
+
+    # The enemy team only has six slots, so anything past e6 is ignored.
+    def test_enemy_only_six_slots(self):
+        response = self.get(pokemon_e7="pikachu")
+        self.assertEqual(self.enemy_names(response), [None] * 6)
+
+    # Each enemy shows its types and base stats.
+    def test_enemy_types_and_stats(self):
+        response = self.get(pokemon_e1="garchomp")
+        self.assertContains(response, "type-badge type-dragon")
+        base = {row["label"]: row["base"] for row in response.context["enemy_slots"][0]["rows"]}
+        self.assertEqual(base, {"HP": 108, "Atk": 130, "Def": 95, "SpA": 80, "SpD": 85, "Spe": 102})
+
+    # A new enemy starts at level 50 with a neutral nature, 31 IVs, 0 EVs and its first ability.
+    def test_enemy_default_set(self):
+        response = self.get(pokemon_e1="garchomp")
+        self.assertEqual(self.stats(response), {"HP": 183, "Atk": 150, "Def": 115, "SpA": 100, "SpD": 105, "Spe": 122})
+        self.assertEqual(response.context["enemy_slots"][0]["ability"], "sand-veil")
+
+    # EVs and nature change an enemy's real stats. Jolly raises Speed and lowers Sp. Atk.
+    def test_enemy_evs_and_nature(self):
+        response = self.get(pokemon_e1="garchomp", nature_e1="jolly", ev_hp_e1=4, ev_atk_e1=252, ev_spe_e1=252)
+        self.assertEqual(self.stats(response), {"HP": 184, "Atk": 182, "Def": 115, "SpA": 90, "SpD": 105, "Spe": 169})
+        self.assertEqual(response.context["enemy_slots"][0]["ev_total"], 508)
+
+    # IVs change an enemy's real stats.
+    def test_enemy_ivs(self):
+        response = self.get(pokemon_e1="garchomp", iv_spe_e1=0)
+        self.assertEqual(self.stats(response)["Spe"], 107)
+
+    # Level changes an enemy's real stats.
+    def test_enemy_level(self):
+        response = self.get(pokemon_e1="garchomp", level_e1=1)
+        self.assertEqual(self.stats(response)["HP"], 13)
+
+    # Any of the enemy's abilities can be picked.
+    def test_enemy_pick_ability(self):
+        response = self.get(pokemon_e1="bronzong", ability_e1="heatproof")
+        self.assertEqual(response.context["enemy_slots"][0]["ability"], "heatproof")
+        self.assertEqual(self.errors(response), [])
+
+    # An ability the enemy can't have shows an error.
+    def test_enemy_wrong_ability(self):
+        response = self.get(pokemon_e1="garchomp", ability_e1="levitate")
+        self.assertEqual(self.errors(response), ["Ability: Garchomp can't have Levitate."])
+
+    # Enemy items work with spaces and capitals, like "Choice Scarf".
+    def test_enemy_item(self):
+        response = self.get(pokemon_e1="garchomp", item_e1="Choice Scarf")
+        self.assertEqual(self.errors(response), [])
+
+    # An item the calc doesn't know shows an error.
+    def test_enemy_unknown_item(self):
+        response = self.get(pokemon_e1="garchomp", item_e1="rare-candy")
+        self.assertEqual(self.errors(response), ["Item: Rare Candy isn't an item the calc knows."])
+
+    # Four moves the enemy can learn, including status moves.
+    def test_enemy_moves(self):
+        response = self.get(pokemon_e1="heatran", move1_e1="magma-storm", move2_e1="Earth Power", move3_e1="flash-cannon", move4_e1="stealth-rock")
+        self.assertEqual(self.errors(response), [])
+        self.assertEqual([move.value() for move in response.context["enemy_slots"][0]["moves"]], ["Magma Storm", "Earth Power", "Flash Cannon", "Stealth Rock"])
+
+    # Each enemy's move list only has moves it can learn.
+    def test_enemy_move_options(self):
+        options = self.get(pokemon_e1="heatran").context["enemy_slots"][0]["move_options"]
+        self.assertIn("Magma Storm", options)
+        self.assertNotIn("Thunderbolt", options)
+
+    # A move the enemy can't learn shows an error.
+    def test_enemy_unlearnable_move(self):
+        response = self.get(pokemon_e1="heatran", move1_e1="thunderbolt")
+        self.assertEqual(self.errors(response), ["Move 1: Heatran can't learn Thunderbolt."])
+
+    # An enemy can't know the same move twice.
+    def test_enemy_duplicate_move(self):
+        response = self.get(pokemon_e1="heatran", move1_e1="magma-storm", move2_e1="magma-storm")
+        self.assertEqual(self.errors(response), ["Move 2: Magma Storm is already one of its moves."])
+
+    # Enemy EVs can't go over 252 in one stat.
+    def test_enemy_ev_limit(self):
+        response = self.get(pokemon_e1="heatran", ev_spa_e1=300)
+        self.assertEqual(self.errors(response), ["SpA EVs: Ensure this value is less than or equal to 252."])
+
+    # Enemy EVs can't add up to more than 510.
+    def test_enemy_ev_total(self):
+        response = self.get(pokemon_e1="heatran", ev_hp_e1=252, ev_spa_e1=252, ev_spe_e1=252)
+        self.assertEqual(self.errors(response), ["EVs can't add up to more than 510."])
+
+    # Enemy IVs can't go over 31, and level can't go over 50.
+    def test_enemy_iv_and_level_limits(self):
+        response = self.get(pokemon_e1="heatran", iv_hp_e1=32, level_e1=51)
+        self.assertEqual(sorted(self.errors(response)), ["HP IVs: Ensure this value is less than or equal to 31.", "Level: Ensure this value is less than or equal to 50."])
+
+    # An enemy's error only shows in that enemy slot, not in your slot with the same number.
+    def test_enemy_errors_stay_in_their_slot(self):
+        response = self.get(pokemon_1="garchomp", pokemon_e1="heatran", ev_spa_e1=300)
+        self.assertEqual(response.context["slots"][0]["errors"], [])
+        self.assertEqual(self.errors(response), ["SpA EVs: Ensure this value is less than or equal to 252."])
+
+    # The boxes keep the enemy's set from the link, so a shared link opens with both teams filled in.
+    def test_enemy_set_saved_in_link(self):
+        response = self.get(pokemon_1="garchomp", pokemon_e1="heatran", item_e1="leftovers", nature_e1="modest", ev_spa_e1=252)
+        self.assertEqual(self.team_names(response)[0], "garchomp")
+        self.assertContains(response, 'value="Leftovers"')
+        self.assertContains(response, 'value="252"')
+        self.assertContains(response, '<option value="modest" selected>')
+
+    # Each team's Clear button keeps the other team.
+    def test_clear_buttons_keep_the_other_team(self):
+        response = self.get(pokemon_1="garchomp", ev_atk_1=252, pokemon_e1="heatran", ev_spa_e1=252)
+        self.assertEqual(response.context["clear_team_link"], reverse("team_builder") + "?pokemon_e1=heatran&ev_spa_e1=252")
+        self.assertEqual(response.context["clear_enemy_link"], reverse("team_builder") + "?pokemon_1=garchomp&ev_atk_1=252")
