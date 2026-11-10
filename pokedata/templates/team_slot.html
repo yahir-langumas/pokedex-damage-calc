@@ -69,7 +69,7 @@
       {% for move in slot.moves %}{{ move }}{% endfor %}
     </div>
     <datalist id="moves-{{ slot.number }}">
-      {% for name in slot.move_options %}<option value="{{ name }}">{% endfor %}
+        {% for name in slot.move_options %}<option value="{{ name }}"></option>{% endfor %}
     </datalist>
     {% else %}
     <p class="slot-empty">{% if slot.enemy %}Empty enemy slot{% else %}Empty slot{% endif %}</p>

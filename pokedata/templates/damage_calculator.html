@@ -121,9 +121,12 @@
       </div>
       <span class="ko-chip{% if 'OHKO' in result.ko_chance %} ohko{% elif result.ko_chance != 'No damage' %} multi{% endif %}">{{ result.ko_chance }}</span>
     </div>
-    <div class="hp-bar" role="img" aria-label="{{ hp_bar.after_max }}% to {{ hp_bar.after_min }}% HP left after the hit">
-      <div class="hp-fill {{ hp_bar.color }}" style="width: {{ hp_bar.after_max }}%"></div>
-      <div class="hp-fill range {{ hp_bar.color }}" style="width: {{ hp_bar.range }}%"></div>
+        <div class="hp-bar" role="img" aria-label="{{ hp_bar.after_max }}% to {{ hp_bar.after_min }}% HP left after the hit">
+    
+        {# djlint:off H021 #}
+        <div class="hp-fill {{ hp_bar.color }}" style="width: {{ hp_bar.after_max }}%"></div>
+        <div class="hp-fill range {{ hp_bar.color }}" style="width: {{ hp_bar.range }}%"></div>
+        {# djlint:on #}
     </div>
     <div class="hp-caption">{{ hp_bar.after_max }}% – {{ hp_bar.after_min }}% HP left</div>
     <div class="result-meta">
@@ -173,10 +176,10 @@
 </div>
 
 <datalist id="pokemon-names">
-  {% for name in species_names %}<option value="{{ name }}">{% endfor %}
+    {% for name in species_names %}<option value="{{ name }}"></option>{% endfor %}
 </datalist>
 <datalist id="item-names">
-  {% for name in items %}<option value="{{ name }}">{% endfor %}
+   {% for name in items %}<option value="{{ name }}"></option>{% endfor %}
 </datalist>
 
 <script>
